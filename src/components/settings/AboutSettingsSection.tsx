@@ -42,7 +42,7 @@ export function AboutSettingsSection() {
       <section className="pb-2">
         <h2 className="text-xl font-medium mb-0.5">Version</h2>
         <p className="text-sm text-text-muted mb-4">
-          You are currently using Scratch v{appVersion || "..."}
+          You are currently using Scratch Nano v{appVersion || "..."}
         </p>
         <Button
           onClick={handleCheckForUpdates}
@@ -70,14 +70,14 @@ export function AboutSettingsSection() {
 
       {/* About Section */}
       <section className="pb-2">
-        <h2 className="text-xl font-medium mb-1">About Scratch</h2>
+        <h2 className="text-xl font-medium mb-1">About Scratch Nano</h2>
         <p className="text-sm text-text-muted mb-4">
-          Scratch is a minimalist markdown scratchpad for capturing quick
+          Scratch Nano is a minimalist markdown scratchpad for capturing quick
           thoughts, todos, and ideas. We're offline-first, keyboard-optimized,
           AI-compatible, and open source with no cloud, no accounts, and no
           subscriptions. Learn more on{" "}
           <button
-            onClick={() => handleOpenUrl("https://www.ericli.io/scratch")}
+            onClick={() => handleOpenUrl("https://github.com/hetima/scratch-nano")}
             className="text-text-muted border-b border-text-muted/50 hover:text-text hover:border-text cursor-pointer transition-colors"
           >
             our website
@@ -87,7 +87,7 @@ export function AboutSettingsSection() {
         <p className="text-sm text-text-muted mb-4">
           Created and maintained by{" "}
           <button
-            onClick={() => handleOpenUrl("https://ericli.io")}
+            onClick={() => handleOpenUrl("https://github.com/hetima/scratch-nano")}
             className="text-text-muted border-b border-text-muted/50 hover:text-text hover:border-text cursor-pointer transition-colors"
           >
             Eric Li
@@ -97,7 +97,7 @@ export function AboutSettingsSection() {
         </p>
         <div className="flex items-center gap-1">
           <Button
-            onClick={() => handleOpenUrl("https://github.com/erictli/scratch")}
+            onClick={() => handleOpenUrl("https://github.com/hetima/scratch-nano")}
             variant="outline"
             size="md"
             className="gap-1.25"
@@ -107,7 +107,7 @@ export function AboutSettingsSection() {
           </Button>
           <Button
             onClick={() =>
-              handleOpenUrl("https://github.com/erictli/scratch/issues")
+              handleOpenUrl("https://github.com/hetima/scratch-nano/issues")
             }
             variant="ghost"
             size="md"

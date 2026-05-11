@@ -1,12 +1,10 @@
-# Scratch
+# Scratch Nano
 
-<img src="docs/app-icon.png" alt="Scratch" width="128" height="128" style="border-radius: 22px; margin-bottom: 8px;">
 
-A minimalist, offline-first markdown note-taking app for macOS, Windows, and Linux.
+A super minimal, offline-first markdown note-taking app for macOS, Windows, and Linux.
 
-![macOS](https://img.shields.io/badge/platform-macOS-lightgrey) ![Windows](https://img.shields.io/badge/platform-Windows-blue) ![Linux](https://img.shields.io/badge/platform-Linux-orange)
 
-[Website](https://www.ericli.io/scratch) · [Releases](https://github.com/erictli/scratch/releases)
+[Releases](https://github.com/hetima/scratch-nano/releases)
 
 ## Features
 
@@ -31,32 +29,22 @@ A minimalist, offline-first markdown note-taking app for macOS, Windows, and Lin
 
 ## Screenshot
 
-![Screenshot](docs/screenshot.png)
 
 ## Installation
 
-### macOS
+### Windows
 
-**Homebrew (Recommended)**
+Download the latest `.exe` installer from [Releases](https://github.com/hetima/scratch-nano/releases) and run it. WebView2 will be downloaded automatically if needed.
 
-```bash
-brew tap erictli/tap
-brew install --cask erictli/tap/scratch
-```
+### macOS (but not tested)
 
-**Manual Download**
-
-1. Download the latest `.dmg` from [Releases](https://github.com/erictli/scratch/releases)
+1. Download the latest `.dmg` from [Releases](https://github.com/hetima/scratch-nano/releases)
 2. Open the DMG and drag Scratch to Applications
 3. Open Scratch from Applications
 
-### Windows
+### Linux (but not tested)
 
-Download the latest `.exe` installer from [Releases](https://github.com/erictli/scratch/releases) and run it. WebView2 will be downloaded automatically if needed.
-
-### Linux
-
-Download the latest `.AppImage` or `.deb` from [Releases](https://github.com/erictli/scratch/releases).
+Download the latest `.AppImage` or `.deb` from [Releases](https://github.com/hetima/scratch-nano/releases).
 
 ### From Source
 
@@ -65,11 +53,11 @@ Download the latest `.AppImage` or `.deb` from [Releases](https://github.com/eri
 **macOS:** Xcode Command Line Tools · **Windows:** WebView2 Runtime (pre-installed on Windows 11)
 
 ```bash
-git clone https://github.com/erictli/scratch.git
+git clone https://github.com/hetima/scratch-nano.git
 cd scratch
-npm install
-npm run tauri dev      # Development
-npm run tauri build    # Production build
+pnpm install
+pnpm tauri dev      # Development
+pnpm tauri build    # Production build
 ```
 
 ## Keyboard Shortcuts
@@ -104,17 +92,7 @@ Many more shortcuts and features are available in the app—explore via the comm
 
 [Tauri](https://tauri.app/) · [React](https://react.dev/) · [TipTap](https://tiptap.dev/) · [Tailwind CSS](https://tailwindcss.com/) · [Tantivy](https://github.com/quickwit-oss/tantivy)
 
-## Contributing
-
-Contributions and suggestions are welcome. Scratch is actively maintained but the release cycle is at the whim of my schedule – sometimes I'll review and merge same-day, sometimes it may take several weeks.
-
-What makes Scratch special is its minimal feature set and focus on user experience. We're not trying to build Obsidian or Notion, so not every feature will be a fit.
-
-**Small fixes and improvements:** go ahead and open a PR, we'll try to merge these in regularly.
-
-**Bigger changes:** if you're not sure whether a feature fits, open an issue first and ask.
-
-**Review process:** I generally won't go back and forth with review comments. Try to address any CodeRabbit comments on your PR. From there, I'll make any additional changes directly.
+Forked from: [erictli/scratch: A minimalist, offline-first markdown note-taking app](https://github.com/erictli/scratch)
 
 ## License
 

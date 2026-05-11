@@ -1,16 +1,16 @@
-# Scratch - Development Guide
+# Scratch Nano - Development Guide
 
 ## Project Overview
 
-Scratch is a cross-platform markdown note-taking app for macOS, Windows, and Linux, built with Tauri v2 (Rust backend) + React/TypeScript/Tailwind (frontend) + TipTap (WYSIWYG editor) + Tantivy (full-text search).
+Scratch Nano is a cross-platform markdown note-taking app for macOS, Windows, and Linux, built with Tauri v2 (Rust backend) + React/TypeScript/Tailwind (frontend) + TipTap (WYSIWYG editor) + Tantivy (full-text search).
 
 ## Commands
 
 ```bash
-npm run dev          # Start Vite dev server only
-npm run build        # Build frontend (tsc + vite)
-npm run tauri dev    # Run full app in development mode
-npm run tauri build  # Build production app
+pnpm dev              # Start Vite dev server only
+pnpm build            # Build frontend (tsc + vite)
+pnpm tauri dev        # Run full app in development mode
+pnpm tauri build      # Build production app
 ```
 
 ## CI

@@ -55,11 +55,11 @@ function cliReducer(state: CliState, action: CliAction): CliState {
 function CliUsageHint() {
   return (
     <p className="text-sm text-text-muted font-mono">
-      scratch file.md # open note
+      scratch-nano file.md # open note
       <br />
-      scratch . # open folder
+      scratch-nano . # open folder
       <br />
-      scratch # launch app
+      scratch-nano # launch app
     </p>
   );
 }
@@ -124,7 +124,7 @@ export function ToolsSettingsSection() {
       const status = await cliService.getCliStatus();
       dispatchCli({ type: "operated", status });
       toast.success(
-        "CLI tool installed. Open a new terminal to use `scratch`.",
+        "CLI tool installed. Open a new terminal to use `scratch-nano`.",
       );
     } catch (err) {
       dispatchCli({ type: "operate_failed" });
@@ -214,7 +214,7 @@ export function ToolsSettingsSection() {
             <p className="text-sm text-text-muted mb-4">
               Open notes from the terminal with the{" "}
               <code className="font-mono text-xs bg-bg-muted px-1.5 py-0.5 rounded">
-                scratch
+                scratch-nano
               </code>{" "}
               command
             </p>
