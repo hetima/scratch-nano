@@ -652,12 +652,6 @@ function App() {
     );
   }, []);
 
-  // Check for app updates on startup (folder mode only)
-  useEffect(() => {
-    if (isPreview) return;
-    const timer = setTimeout(() => showUpdateToast(), 3000);
-    return () => clearTimeout(timer);
-  }, [isPreview]);
 
   // Preview mode: lightweight editor without sidebar, search
   if (isPreview && previewFile) {
