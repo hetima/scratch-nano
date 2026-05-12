@@ -19,8 +19,6 @@ A super minimal, offline-first markdown note-taking app for macOS, Windows, and 
 - **Wikilinks** - Type `[[` to link between notes with autocomplete
 - **Slash commands** - Type `/` to quickly insert headings, lists, code blocks, diagrams, and more
 - **Focus mode** - Distraction-free writing with animated sidebar/toolbar fade (`Cmd+Shift+Enter`)
-- **Edit with Claude Code, OpenAI Codex, OpenCode, or Ollama** - Use your local CLI to edit notes with AI (including fully offline via Ollama)
-- **Works with other AI agents** - Detects external file changes
 - **Folders** - Opt-in collapsible folder tree with drag-and-drop to organize notes
 - **Keyboard optimized** - Lots of shortcuts and a command palette
 - **Customizable** - Theme, typography, page width, and RTL text direction

@@ -12,7 +12,6 @@ import { GeneralSettingsSection } from "./GeneralSettingsSection";
 import { AppearanceSettingsSection } from "./EditorSettingsSection";
 import { ShortcutsSettingsSection } from "./ShortcutsSettingsSection";
 import { AboutSettingsSection } from "./AboutSettingsSection";
-import { ToolsSettingsSection } from "./ToolsSettingsSection";
 import { mod, isMac } from "../../lib/platform";
 
 interface SettingsPageProps {
@@ -131,7 +130,6 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
         >
           <div className="w-full max-w-3xl mx-auto px-6 pb-6">
             {activeTab === "general" && <GeneralSettingsSection />}
-            {activeTab === "tools" && <ToolsSettingsSection />}
             {activeTab === "editor" && <AppearanceSettingsSection />}
             {activeTab === "shortcuts" && <ShortcutsSettingsSection />}
             {activeTab === "about" && <AboutSettingsSection />}
