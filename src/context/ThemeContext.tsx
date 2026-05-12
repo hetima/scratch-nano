@@ -51,15 +51,15 @@ const defaultEditorFontSettings: Required<EditorFontSettings> = {
 // Default theme colors (must match App.css :root / .dark values)
 const defaultThemeColors: Record<"light" | "dark", Record<ThemeColorKey, string>> = {
   light: {
-    bg: "#ffffff",
-    "bg-secondary": "#fafaf9",
+    bg: "#fafafa",
+    "bg-secondary": "#F9F9F7",
     "bg-muted": "rgba(28, 25, 23, 0.06)",
     "bg-emphasis": "rgba(28, 25, 23, 0.09)",
-    text: "#1c1917",
+    text: "#303030",
     "text-muted": "#78716c",
     border: "rgba(28, 25, 23, 0.08)",
-    accent: "#1c1917",
-    selection: "rgba(250, 204, 21, 0.4)",
+    accent: "#403430",
+    selection: "rgba(250, 204, 21, 0.6)",
   },
   dark: {
     bg: "rgb(22, 20, 19)",
