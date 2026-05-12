@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui";
-import { cleanTitle } from "../../lib/utils";
+
 import { plainTextFromMarkdown } from "../../lib/plainText";
 import { duplicateNote } from "../../services/notes";
 import {
@@ -458,16 +458,18 @@ export function CommandPalette({
         icon: cmd.icon,
         action: cmd.action,
       })),
-      ...filteredNotes.slice(0, 10).map((note) => ({
+      ...filteredNotes.slice(0, 10).map((note) => {
+        const filename = note.id.includes("/") ? note.id.substring(note.id.lastIndexOf("/") + 1) : note.id;
+        return ({
         type: "note" as const,
         id: note.id,
-        label: cleanTitle(note.title),
+        label: filename,
         preview: note.preview,
         action: () => {
           selectNote(note.id);
           onClose();
         },
-      })),
+      });}),
     ],
     [filteredNotes, filteredCommands, selectNote, onClose],
   );
@@ -602,19 +604,13 @@ export function CommandPalette({
                     Notes
                   </div>
                   {filteredNotes.slice(0, 10).map((note, i) => {
-                    const title = cleanTitle(note.title);
-                    const firstLetter = title.charAt(0).toUpperCase();
-                    // Clean subtitle: treat whitespace-only or &nbsp; as empty
-                    const cleanSubtitle = note.preview
-                      ?.replace(/&nbsp;/g, " ")
-                      .replace(/\u00A0/g, " ")
-                      .trim();
+                    const filename = note.id.includes("/") ? note.id.substring(note.id.lastIndexOf("/") + 1) : note.id;
+                    const firstLetter = filename.charAt(0).toUpperCase();
                     const index = commandsCount + i;
                     return (
                       <div key={note.id} data-index={index}>
                         <CommandItem
-                          label={title}
-                          subtitle={cleanSubtitle}
+                          label={filename}
                           iconText={firstLetter}
                           variant="note"
                           isSelected={selectedIndex === index}

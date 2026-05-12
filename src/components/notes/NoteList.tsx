@@ -13,7 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui";
-import { cleanTitle } from "../../lib/utils";
 import * as notesService from "../../services/notes";
 import { FolderTreeView } from "./FolderTreeView";
 import {
@@ -28,47 +27,9 @@ const menuItemClass =
 
 const menuSeparatorClass = "h-px bg-border my-1";
 
-function formatDate(timestamp: number): string {
-  const date = new Date(timestamp * 1000);
-  const now = new Date();
-
-  const startOfToday = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate()
-  );
-  const startOfYesterday = new Date(startOfToday.getTime() - 86400000);
-
-  if (date >= startOfToday) {
-    return date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-  }
-  if (date >= startOfYesterday) {
-    return "Yesterday";
-  }
-
-  const daysAgo =
-    Math.floor((startOfToday.getTime() - date.getTime()) / 86400000) + 1;
-  if (daysAgo <= 6) {
-    return `${daysAgo} days ago`;
-  }
-
-  if (date.getFullYear() === now.getFullYear()) {
-    return date.toLocaleDateString([], { month: "short", day: "numeric" });
-  }
-
-  return date.toLocaleDateString([], {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}
-
 // Memoized note item component (used in flat list)
 interface NoteItemProps {
   id: string;
-  title: string;
-  preview?: string;
-  modified: number;
   isSelected: boolean;
   isPinned: boolean;
   onSelect: (id: string) => void;
@@ -78,9 +39,6 @@ interface NoteItemProps {
 
 export const NoteItem = memo(function NoteItem({
   id,
-  title,
-  preview,
-  modified,
   isSelected,
   isPinned,
   onSelect,
@@ -96,15 +54,11 @@ export const NoteItem = memo(function NoteItem({
     }
   }, [isSelected]);
 
+  const filename = id.includes("/") ? id.substring(id.lastIndexOf("/") + 1) : id;
   const folder =
     showFolderPrefix && id.includes("/")
       ? id.substring(0, id.lastIndexOf("/"))
       : null;
-  const displayPreview = folder
-    ? preview
-      ? `${folder}/ · ${preview}`
-      : `${folder}/`
-    : preview;
 
   return (
     <div
@@ -112,9 +66,8 @@ export const NoteItem = memo(function NoteItem({
       style={depth != null ? { paddingLeft: `${depth * 12}px` } : undefined}
     >
       <ListItem
-        title={cleanTitle(title)}
-        subtitle={displayPreview}
-        meta={formatDate(modified)}
+        title={filename}
+        subtitle={folder ? `${folder}/` : undefined}
         isSelected={isSelected}
         isPinned={isPinned}
         onClick={handleClick}
@@ -126,9 +79,6 @@ export const NoteItem = memo(function NoteItem({
 // Note item wrapped with Radix context menu
 interface NoteItemWithMenuProps {
   id: string;
-  title: string;
-  preview?: string;
-  modified: number;
   isSelected: boolean;
   isPinned: boolean;
   onSelect: (id: string) => void;
@@ -141,9 +91,6 @@ interface NoteItemWithMenuProps {
 
 const NoteItemWithMenu = memo(function NoteItemWithMenu({
   id,
-  title,
-  preview,
-  modified,
   isSelected,
   isPinned,
   onSelect,
@@ -180,9 +127,6 @@ const NoteItemWithMenu = memo(function NoteItemWithMenu({
         <div>
           <NoteItem
             id={id}
-            title={title}
-            preview={preview}
-            modified={modified}
             isSelected={isSelected}
             isPinned={isPinned}
             onSelect={onSelect}
@@ -300,7 +244,6 @@ export function NoteList({
       return searchResults.map((r) => ({
         id: r.id,
         title: r.title,
-        preview: r.preview,
         modified: r.modified,
       }));
     }
@@ -401,15 +344,12 @@ export function NoteList({
         ref={containerRef}
         tabIndex={0}
         data-note-list
-        className="group/notelist flex flex-col gap-1 p-1.5 outline-none"
+        className="group/notelist flex flex-col gap-0.5 p-1 outline-none"
       >
         {displayItems.map((item) => (
           <NoteItemWithMenu
             key={item.id}
             id={item.id}
-            title={item.title}
-            preview={item.preview}
-            modified={item.modified}
             isSelected={selectedNoteId === item.id}
             isPinned={pinnedIds.has(item.id)}
             onSelect={selectNote}

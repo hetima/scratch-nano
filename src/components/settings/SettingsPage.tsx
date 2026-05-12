@@ -5,7 +5,6 @@ import {
   SwatchIcon,
   KeyboardIcon,
   InfoIcon,
-  IntegrationsIcon,
 } from "../icons";
 import { Button, IconButton } from "../ui";
 import { GeneralSettingsSection } from "./GeneralSettingsSection";
@@ -27,10 +26,9 @@ const tabs: {
   shortcut: string;
 }[] = [
   { id: "general", label: "Folder", icon: FolderIcon, shortcut: "1" },
-  { id: "tools", label: "Integrations", icon: IntegrationsIcon, shortcut: "2" },
-  { id: "editor", label: "Appearance", icon: SwatchIcon, shortcut: "3" },
-  { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon, shortcut: "4" },
-  { id: "about", label: "About", icon: InfoIcon, shortcut: "5" },
+  { id: "editor", label: "Appearance", icon: SwatchIcon, shortcut: "2" },
+  { id: "shortcuts", label: "Shortcuts", icon: KeyboardIcon, shortcut: "3" },
+  { id: "about", label: "About", icon: InfoIcon, shortcut: "4" },
 ];
 
 export function SettingsPage({ onBack }: SettingsPageProps) {
@@ -53,14 +51,11 @@ export function SettingsPage({ onBack }: SettingsPageProps) {
           setActiveTab("general");
         } else if (e.key === "2") {
           e.preventDefault();
-          setActiveTab("tools");
+          setActiveTab("editor");
         } else if (e.key === "3") {
           e.preventDefault();
-          setActiveTab("editor");
-        } else if (e.key === "4") {
-          e.preventDefault();
           setActiveTab("shortcuts");
-        } else if (e.key === "5") {
+        } else if (e.key === "4") {
           e.preventDefault();
           setActiveTab("about");
         }

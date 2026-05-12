@@ -9,7 +9,6 @@ import {
   type TreeItem,
 } from "../../lib/folderTree";
 import { FolderNameDialog } from "./FolderNameDialog";
-import { cleanTitle } from "../../lib/utils";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -178,7 +177,7 @@ const FileItem = memo(function FileItem({
             <NoteIcon className="w-4 h-4 stroke-[1.6] opacity-50 shrink-0" />
           )}
           <span className="text-sm text-text truncate">
-            {cleanTitle(note.title)}
+            {note.id.includes("/") ? note.id.substring(note.id.lastIndexOf("/") + 1) : note.id}
           </span>
         </div>
       </ContextMenu.Trigger>

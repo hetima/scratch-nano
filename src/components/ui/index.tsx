@@ -142,7 +142,6 @@ interface ListItemProps {
 export function ListItem({
   title,
   subtitle,
-  meta,
   isSelected = false,
   isPinned = false,
   onClick,
@@ -162,7 +161,7 @@ export function ListItem({
       role="button"
       tabIndex={-1}
       className={cn(
-        "w-full text-left px-2.5 py-2.25 transition-colors cursor-pointer select-none rounded-md",
+        "w-full text-left px-2.5 py-1.5 transition-colors cursor-pointer select-none rounded-md",
         "focus:outline-none focus-visible:outline-none",
         isSelected
           ? "bg-bg-muted group-focus/notelist:ring-1 group-focus/notelist:ring-text-muted"
@@ -178,27 +177,17 @@ export function ListItem({
             {title}
           </span>
         </div>
-      </div>
-      <div className="flex items-center gap-1.5 shrink-0">
-        {meta && (
-          <div
+        {hasSubtitle && (
+          <span
             className={cn(
-              "text-xs whitespace-nowrap",
-              isSelected ? "text-text" : "text-text-muted"
+              "text-xs whitespace-nowrap shrink-0",
+              isSelected ? "text-text" : "text-text-muted",
+              isSelected ? "opacity-100" : "opacity-70"
             )}
           >
-            {meta}
-          </div>
+            {cleanSubtitle}
+          </span>
         )}
-        <p
-          className={cn(
-            "text-xs line-clamp-1 min-h-5",
-            hasSubtitle ? "text-text-muted" : "text-transparent",
-            isSelected ? "opacity-100" : "opacity-70"
-          )}
-        >
-          {hasSubtitle ? cleanSubtitle : "\u00A0"}
-        </p>
       </div>
     </div>
   );

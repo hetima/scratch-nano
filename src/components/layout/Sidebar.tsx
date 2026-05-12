@@ -17,13 +17,11 @@ import { IconButton, Input } from "../ui";
 import {
   PlusIcon,
   XIcon,
-  SearchIcon,
-  SearchOffIcon,
   AddNoteIcon,
   FolderPlusIcon,
   NoteIcon,
 } from "../icons";
-import { mod, shift, isMac } from "../../lib/platform";
+import { mod, isMac } from "../../lib/platform";
 import * as notesService from "../../services/notes";
 import { FolderNameDialog } from "../notes/FolderNameDialog";
 
@@ -43,7 +41,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     moveNote,
     moveFolder,
   } = useNotes();
-  const [searchOpen, setSearchOpen] = useState(false);
   const [inputValue, setInputValue] = useState(searchQuery);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
   const [folderDialogOpen, setFolderDialogOpen] = useState(false);
@@ -197,43 +194,14 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     [search],
   );
 
-  const toggleSearch = useCallback(() => {
-    setSearchOpen((prev) => {
-      if (prev) {
-        // Closing search — clear query
-        setInputValue("");
-        clearSearch();
-      } else {
-        // Opening search — clear multi-selection
-        setMultiSelectedNoteIds(new Set());
-      }
-      return !prev;
-    });
-  }, [clearSearch]);
 
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    setInputValue("");
-    clearSearch();
-  }, [clearSearch]);
 
-  // Auto-focus search input when opened
-  useEffect(() => {
-    if (searchOpen) {
-      // Small delay to ensure the input is rendered
-      requestAnimationFrame(() => {
-        searchInputRef.current?.focus();
-      });
-    }
-  }, [searchOpen]);
 
-  // Global shortcut hook: open and focus sidebar search
+
+  // Global shortcut hook: focus sidebar search
   useEffect(() => {
     const handleOpenSidebarSearch = () => {
-      setSearchOpen(true);
-      requestAnimationFrame(() => {
-        searchInputRef.current?.focus();
-      });
+      searchInputRef.current?.focus();
     };
 
     window.addEventListener("open-sidebar-search", handleOpenSidebarSearch);
@@ -249,16 +217,12 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       if (e.key === "Escape") {
         e.preventDefault();
         if (inputValue) {
-          // First escape: clear search
           setInputValue("");
           clearSearch();
-        } else {
-          // Second escape: close search
-          closeSearch();
         }
       }
     },
-    [inputValue, clearSearch, closeSearch],
+    [inputValue, clearSearch],
   );
 
   const handleClearSearch = useCallback(() => {
@@ -311,26 +275,15 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       onDragCancel={() => setDragLabel(null)}
     >
     <div className="relative w-64 h-full bg-bg-secondary border-r border-border flex flex-col select-none">
-      {/* Drag region */}
-      <div className="h-11 shrink-0" data-tauri-drag-region></div>
-      <div className="flex items-center justify-between pl-4 pr-3 pb-2 border-b border-border shrink-0">
+      {/* Header row with drag region */}
+      <div className="h-11 shrink-0 flex items-center justify-between pl-4 pr-3" data-tauri-drag-region>
         <div className="flex items-center gap-1">
           <div className="font-medium text-base">Notes</div>
           <div className="text-text-muted font-medium text-2xs min-w-4.75 h-4.75 flex items-center justify-center px-1 bg-bg-muted rounded-sm mt-0.5 pt-px">
             {notes.length}
           </div>
         </div>
-        <div className="flex items-center gap-px">
-          <IconButton
-            onClick={toggleSearch}
-            title={`Search Notes (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}F)`}
-          >
-            {searchOpen ? (
-              <SearchOffIcon className="w-4.25 h-4.25 stroke-[1.5]" />
-            ) : (
-              <SearchIcon className="w-4.25 h-4.25 stroke-[1.5]" />
-            )}
-          </IconButton>
+        <div className="flex items-center gap-px titlebar-no-drag">
           {foldersEnabled ? (
             <DropdownMenu.Root
               open={plusMenuOpen}
@@ -383,35 +336,32 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           )}
         </div>
       </div>
-      {/* Scrollable area with search and notes */}
-      <div className="flex-1 overflow-y-auto">
-        {/* Search - sticky at top */}
-        {searchOpen && (
-          <div className="sticky top-0 z-10 px-2 pt-2 bg-bg-secondary">
-            <div className="relative">
-              <Input
-                ref={searchInputRef}
-                type="text"
-                value={inputValue}
-                onChange={handleSearchChange}
-                onKeyDown={handleSearchKeyDown}
-                placeholder="Search notes..."
-                className="h-9 pr-8 text-sm"
-              />
-              {inputValue && (
-                <button
-                  onClick={handleClearSearch}
-                  tabIndex={-1}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
-                >
-                  <XIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
+      {/* Search - always visible */}
+      <div className="px-2 pt-0.5 pb-1.5 border-b border-border shrink-0">
+        <div className="relative">
+          <Input
+            ref={searchInputRef}
+            type="text"
+            value={inputValue}
+            onChange={handleSearchChange}
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Search notes..."
+            className="h-8 pr-8 text-sm"
+          />
+          {inputValue && (
+            <button
+              onClick={handleClearSearch}
+              tabIndex={-1}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-text-muted hover:text-text"
+            >
+              <XIcon className="w-4.5 h-4.5 stroke-[1.5]" />
+            </button>
+          )}
+        </div>
+      </div>
 
-        {/* Note list */}
+      {/* Scrollable notes area */}
+      <div className="flex-1 overflow-y-auto">
         <NoteList
           multiSelectedNoteIds={multiSelectedNoteIds}
           setMultiSelectedNoteIds={setMultiSelectedNoteIds}

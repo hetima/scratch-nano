@@ -546,17 +546,18 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
     const queryLower = trimmedQuery.toLowerCase();
     // Instant local results for responsive UX while full-text search runs.
+    // Filter by id (filename) for quick matches; full-text search handles content.
     const instantResults: SearchResult[] = notesRef.current
       .filter(
         (note) =>
-          note.title.toLowerCase().includes(queryLower) ||
-          note.preview.toLowerCase().includes(queryLower),
+          note.id.toLowerCase().includes(queryLower) ||
+          note.title.toLowerCase().includes(queryLower),
       )
       .slice(0, 20)
       .map((note) => ({
         id: note.id,
         title: note.title,
-        preview: note.preview,
+        preview: "",
         modified: note.modified,
         score: 0,
       }));
