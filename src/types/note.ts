@@ -47,7 +47,6 @@ export type CustomColors = Partial<Record<ThemeColorKey, string>>;
 export interface Settings {
   theme: ThemeSettings;
   editorFont?: EditorFontSettings;
-  gitEnabled?: boolean;
   foldersEnabled?: boolean;
   pinnedNoteIds?: string[];
   textDirection?: TextDirection;

@@ -32,7 +32,7 @@ Runs on every push to `main` and on PRs. Validates frontend build (`tsc` + Vite)
 - No commented-out code or TODOs in production code
 - Use `React.memo` for expensive list-item components
 - Use `useCallback`/`useMemo` for performance-critical paths
-- Debounce user-triggered operations (auto-save 300ms, search 150ms, file watcher 500ms, git status 1000ms)
+- Debounce user-triggered operations (auto-save 300ms, search 150ms, file watcher 500ms)
 - All operations should be non-blocking (async)
 - Error handling with user-friendly messages
 

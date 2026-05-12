@@ -72,16 +72,6 @@ export async function updateSettings(settings: Settings): Promise<void> {
   return invoke("update_settings", { newSettings: settings });
 }
 
-export async function updateGitEnabled(
-  enabled: boolean,
-  expectedFolder: string,
-): Promise<void> {
-  return invoke("update_git_enabled", {
-    enabled,
-    expectedFolder,
-  });
-}
-
 export interface SearchResult {
   id: string;
   title: string;

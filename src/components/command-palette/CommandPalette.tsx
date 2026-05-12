@@ -11,7 +11,6 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { useNotes } from "../../context/NotesContext";
 import { useTheme } from "../../context/ThemeContext";
-import { useGit } from "../../context/GitContext";
 import * as notesService from "../../services/notes";
 import * as aiService from "../../services/ai";
 import { downloadPdf, downloadMarkdown } from "../../services/pdf";
@@ -36,8 +35,6 @@ import {
   DownloadIcon,
   SettingsIcon,
   SwatchIcon,
-  GitCommitIcon,
-  RefreshCwIcon,
   AddNoteIcon,
   TrashIcon,
   PinIcon,
@@ -95,7 +92,6 @@ export function CommandPalette({
     notesFolder,
   } = useNotes();
   const { setTheme } = useTheme();
-  const { status, gitAvailable, gitEnabled, commit, sync, isSyncing } = useGit();
   const [query, setQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -368,46 +364,6 @@ export function CommandPalette({
       );
     }
 
-    // Add git commands when git integration is visible and initialized
-    if (gitEnabled && gitAvailable && status?.isRepo) {
-      const hasChanges = (status?.changedCount ?? 0) > 0;
-      const canSync = status?.hasRemote && status?.hasUpstream && !isSyncing;
-
-      if (hasChanges) {
-        baseCommands.push({
-          id: "git-commit",
-          label: "Git: Quick Commit",
-          icon: <GitCommitIcon className="w-4.5 h-4.5 stroke-[1.5]" />,
-          action: async () => {
-            const success = await commit("Quick commit from Scratch Nano");
-            if (success) {
-              toast.success("Changes committed");
-            } else {
-              toast.error("Failed to commit");
-            }
-            onClose();
-          },
-        });
-      }
-
-      if (canSync) {
-        baseCommands.push({
-          id: "git-sync",
-          label: "Git: Sync (Pull and Push)",
-          icon: <RefreshCwIcon className="w-4.5 h-4.5 stroke-[1.5]" />,
-          action: async () => {
-            const result = await sync();
-            if (result.ok) {
-              toast.success(result.message);
-            } else {
-              toast.error(result.error);
-            }
-            onClose();
-          },
-        });
-      }
-    }
-
     // Focus mode and source toggle
     baseCommands.push(
       {
@@ -511,12 +467,6 @@ export function CommandPalette({
     onOpenAiModal,
     availableAiProviders,
     setTheme,
-    gitEnabled,
-    gitAvailable,
-    status,
-    commit,
-    sync,
-    isSyncing,
     selectNote,
     refreshNotes,
     settings,

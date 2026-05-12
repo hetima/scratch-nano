@@ -16,8 +16,6 @@ use tauri_plugin_clipboard_manager::ClipboardExt;
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
-mod git;
-
 // Note metadata for list display
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NoteMetadata {
@@ -108,8 +106,6 @@ pub struct Settings {
     pub theme: ThemeSettings,
     #[serde(rename = "editorFont")]
     pub editor_font: Option<EditorFontSettings>,
-    #[serde(rename = "gitEnabled")]
-    pub git_enabled: Option<bool>,
     #[serde(rename = "pinnedNoteIds")]
     pub pinned_note_ids: Option<Vec<String>>,
     #[serde(rename = "textDirection")]
@@ -1765,34 +1761,6 @@ fn update_settings(
 }
 
 #[tauri::command]
-fn update_git_enabled(
-    enabled: Option<bool>,
-    expected_folder: String,
-    state: State<AppState>,
-) -> Result<(), String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        let folder = app_config.notes_folder.clone().ok_or("Notes folder not set")?;
-
-        if folder != expected_folder {
-            return Err("Notes folder changed".to_string());
-        }
-
-        folder
-    };
-
-    {
-        let mut settings = state.settings.write().expect("settings write lock");
-        settings.git_enabled = enabled;
-    }
-
-    let settings = state.settings.read().expect("settings read lock");
-    save_settings(&folder, &settings).map_err(|e| e.to_string())?;
-
-    Ok(())
-}
-
-#[tauri::command]
 async fn write_file(path: String, contents: Vec<u8>) -> Result<(), String> {
     fs::write(&path, contents)
         .await
@@ -2514,253 +2482,6 @@ async fn open_url_safe(url: String) -> Result<(), String> {
 
     // Use system opener
     open::that(&url).map_err(|e| format!("Failed to open URL: {}", e))
-}
-
-// Git commands - run blocking git operations off the main thread
-
-#[tauri::command]
-async fn git_is_available() -> bool {
-    tauri::async_runtime::spawn_blocking(git::is_available)
-        .await
-        .unwrap_or(false)
-}
-
-#[tauri::command]
-async fn git_get_status(state: State<'_, AppState>) -> Result<git::GitStatus, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::get_status(&PathBuf::from(path))
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitStatus::default()),
-    }
-}
-
-#[tauri::command]
-async fn git_init_repo(state: State<'_, AppState>) -> Result<(), String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone().ok_or("Notes folder not set")?
-    };
-
-    tauri::async_runtime::spawn_blocking(move || {
-        git::git_init(&PathBuf::from(folder))
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
-
-#[tauri::command]
-async fn git_commit(message: String, state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::commit_all(&PathBuf::from(path), &message)
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
-}
-
-#[tauri::command]
-async fn git_push(state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::push(&PathBuf::from(path))
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
-}
-
-#[tauri::command]
-async fn git_fetch(state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::fetch(&PathBuf::from(path))
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
-}
-
-#[tauri::command]
-async fn git_pull(state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::pull(&PathBuf::from(path))
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
-}
-
-#[tauri::command]
-async fn git_add_remote(url: String, state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::add_remote(&PathBuf::from(path), &url)
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
-}
-
-#[tauri::command]
-async fn git_set_remote_url(url: String, state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::set_remote_url(&PathBuf::from(path), &url)
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
-}
-
-#[tauri::command]
-async fn git_remove_remote(state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                git::remove_remote(&PathBuf::from(path))
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
-}
-
-#[tauri::command]
-async fn git_push_with_upstream(state: State<'_, AppState>) -> Result<git::GitResult, String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
-    };
-
-    match folder {
-        Some(path) => {
-            tauri::async_runtime::spawn_blocking(move || {
-                // Get current branch first
-                let status = git::get_status(&PathBuf::from(&path));
-                match status.current_branch {
-                    Some(branch) => {
-                        if !branch
-                            .chars()
-                            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
-                        {
-                            return git::GitResult {
-                                success: false,
-                                message: None,
-                                error: Some("Invalid branch name".to_string()),
-                            };
-                        }
-                        git::push_with_upstream(&PathBuf::from(&path), &branch)
-                    }
-                    None => git::GitResult {
-                        success: false,
-                        message: None,
-                        error: Some("No current branch found".to_string()),
-                    },
-                }
-            })
-            .await
-            .map_err(|e| e.to_string())
-        }
-        None => Ok(git::GitResult {
-            success: false,
-            message: None,
-            error: Some("Notes folder not set".to_string()),
-        }),
-    }
 }
 
 // Check if Claude CLI is installed
@@ -3822,7 +3543,6 @@ pub fn run() {
             move_folder,
             get_settings,
             update_settings,
-            update_git_enabled,
             preview_note_name,
             write_file,
             search_notes,
@@ -3835,17 +3555,6 @@ pub fn run() {
             open_folder_dialog,
             open_in_file_manager,
             open_url_safe,
-            git_is_available,
-            git_get_status,
-            git_init_repo,
-            git_commit,
-            git_push,
-            git_fetch,
-            git_pull,
-            git_add_remote,
-            git_set_remote_url,
-            git_remove_remote,
-            git_push_with_upstream,
             ai_check_claude_cli,
             ai_check_codex_cli,
             ai_check_opencode_cli,

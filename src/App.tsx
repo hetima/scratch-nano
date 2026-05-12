@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import { NotesProvider, useNotes } from "./context/NotesContext";
 import { ThemeProvider, useTheme } from "./context/ThemeContext";
 import { listen } from "@tauri-apps/api/event";
-import { GitProvider } from "./context/GitContext";
 import { TooltipProvider, Toaster } from "./components/ui";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Editor } from "./components/editor/Editor";
@@ -660,7 +659,7 @@ function App() {
     return () => clearTimeout(timer);
   }, [isPreview]);
 
-  // Preview mode: lightweight editor without sidebar, search, git
+  // Preview mode: lightweight editor without sidebar, search
   if (isPreview && previewFile) {
     return (
       <ThemeProvider>
@@ -672,15 +671,13 @@ function App() {
     );
   }
 
-  // Folder mode: full app with sidebar, search, git, etc.
+  // Folder mode: full app with sidebar, search, etc.
   return (
     <ThemeProvider>
       <Toaster />
       <TooltipProvider>
         <NotesProvider>
-          <GitProvider>
             <AppContent />
-          </GitProvider>
         </NotesProvider>
       </TooltipProvider>
     </ThemeProvider>

@@ -420,7 +420,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         />
       </div>
 
-      {/* Footer with git status, commit, and settings */}
+      {/* Footer with settings */}
       <Footer onOpenSettings={onOpenSettings} />
 
       {/* Folder name dialog */}

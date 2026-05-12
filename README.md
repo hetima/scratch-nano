@@ -24,7 +24,6 @@ A super minimal, offline-first markdown note-taking app for macOS, Windows, and 
 - **Folders** - Opt-in collapsible folder tree with drag-and-drop to organize notes
 - **Keyboard optimized** - Lots of shortcuts and a command palette
 - **Customizable** - Theme, typography, page width, and RTL text direction
-- **Git integration** - Optional version control with push/pull for multi-device sync
 - **Lightweight** - 5-10x smaller than Obsidian or Notion
 
 ## Screenshot
