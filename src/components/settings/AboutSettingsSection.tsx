@@ -72,29 +72,31 @@ export function AboutSettingsSection() {
       <section className="pb-2">
         <h2 className="text-xl font-medium mb-1">About Scratch Nano</h2>
         <p className="text-sm text-text-muted mb-4">
-          Scratch Nano is a minimalist markdown scratchpad for capturing quick
-          thoughts, todos, and ideas. We're offline-first, keyboard-optimized,
-          AI-compatible, and open source with no cloud, no accounts, and no
-          subscriptions. Learn more on{" "}
+          Scratch Nano is a super minimal markdown scratchpad for capturing quick
+          thoughts, todos, and ideas. Based on{" "}
           <button
-            onClick={() => handleOpenUrl("https://github.com/hetima/scratch-nano")}
+            onClick={() => handleOpenUrl("https://www.ericli.io/scratch")}
             className="text-text-muted border-b border-text-muted/50 hover:text-text hover:border-text cursor-pointer transition-colors"
           >
-            our website
+            Scratch
+          </button>
+          , inspired by{" "}
+          <button
+            onClick={() => handleOpenUrl("https://notational.net/")}
+            className="text-text-muted border-b border-text-muted/50 hover:text-text hover:border-text cursor-pointer transition-colors"
+          >
+            Notational Velocity
+          </button>
+          {" "}and{" "}
+          <button
+            onClick={() => handleOpenUrl("https://brettterpstra.com/projects/nvalt/")}
+            className="text-text-muted border-b border-text-muted/50 hover:text-text hover:border-text cursor-pointer transition-colors"
+          >
+            nvALT
           </button>
           .
         </p>
-        <p className="text-sm text-text-muted mb-4">
-          Created and maintained by{" "}
-          <button
-            onClick={() => handleOpenUrl("https://github.com/hetima/scratch-nano")}
-            className="text-text-muted border-b border-text-muted/50 hover:text-text hover:border-text cursor-pointer transition-colors"
-          >
-            Eric Li
-          </button>{" "}
-          with moral support from his cat, Mochi, and actual support from many
-          contributors on GitHub.
-        </p>
+
         <div className="flex items-center gap-1">
           <Button
             onClick={() => handleOpenUrl("https://github.com/hetima/scratch-nano")}
