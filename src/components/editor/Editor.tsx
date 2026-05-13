@@ -56,6 +56,7 @@ function isAllowedUrlScheme(url: string): boolean {
     return false;
   }
 }
+
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { useOptionalNotes } from "../../context/NotesContext";
@@ -754,12 +755,12 @@ export function Editor({
     }
   }, [saveImmediately, getMarkdown]);
 
+  // 保存はほぼこれで実行
   // Schedule a debounced save (markdown computed only when timer fires)
   const scheduleSave = useCallback(() => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
     }
-
     const savingNoteId = currentNote?.id;
     if (!savingNoteId) return;
 
@@ -1051,6 +1052,7 @@ export function Editor({
           levels: [1, 2, 3, 4, 5, 6],
         },
         codeBlock: false,
+        link: false,
       }),
       CodeBlockLowlight.extend({
         addNodeView() {
@@ -1065,9 +1067,11 @@ export function Editor({
       }),
       Link.configure({
         openOnClick: false,
+        linkOnPaste: false,
         HTMLAttributes: {
           class: "underline cursor-pointer",
         },
+        autolink: false, // Disable automatic link detection
       }),
       // Convert markdown link syntax [text](url) into real links when typed
       Extension.create({
@@ -2053,25 +2057,8 @@ export function Editor({
   const handleSourceChange = useCallback(
     (value: string) => {
       setSourceContent(value);
-      if (sourceTimeoutRef.current) {
-        clearTimeout(sourceTimeoutRef.current);
-      }
-      sourceTimeoutRef.current = window.setTimeout(async () => {
-        if (currentNote) {
-          setIsSaving(true);
-          try {
-            lastSaveRef.current = { noteId: currentNote.id, content: value };
-            await saveNote(value, currentNote.id);
-          } catch (error) {
-            console.error("Failed to save note:", error);
-            toast.error("Failed to save note");
-          } finally {
-            setIsSaving(false);
-          }
-        }
-      }, 300);
     },
-    [currentNote, saveNote],
+    [],
   );
 
   if (!currentNote) {
