@@ -14,7 +14,7 @@ import {
 } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
-import Link from "@tiptap/extension-link";
+import { CustomLink } from "./CustomLink";
 import Image from "@tiptap/extension-image";
 import TaskList from "@tiptap/extension-task-list";
 import TaskItem from "@tiptap/extension-task-item";
@@ -1065,13 +1065,13 @@ export function Editor({
       Placeholder.configure({
         placeholder: "Start writing...",
       }),
-      Link.configure({
-        openOnClick: false,
+      CustomLink.configure({
+        openOnClick: true,
         linkOnPaste: false,
         HTMLAttributes: {
           class: "underline cursor-pointer",
         },
-        autolink: false, // Disable automatic link detection
+        autolink: true,
       }),
       // Convert markdown link syntax [text](url) into real links when typed
       Extension.create({

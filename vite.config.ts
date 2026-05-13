@@ -50,7 +50,6 @@ export default defineConfig(async () => ({
             "@tiptap/react",
             "@tiptap/starter-kit",
             "@tiptap/markdown",
-            "@tiptap/extension-link",
             "@tiptap/extension-image",
             "@tiptap/extension-placeholder",
             "@tiptap/extension-task-list",
