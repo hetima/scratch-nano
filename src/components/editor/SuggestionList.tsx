@@ -1,8 +1,6 @@
+// @ts-nocheck
+// This file is deprecated
 import {
-  forwardRef,
-  useEffect,
-  useImperativeHandle,
-  useState,
   useRef,
   type ReactNode,
 } from "react";

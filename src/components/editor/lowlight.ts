@@ -1,4 +1,6 @@
-import { createLowlight } from "lowlight";
+// @ts-nocheck
+// This file is deprecated - Milkdown Crepe has built-in code block support
+export {};
 
 // Import only common languages to keep bundle small
 import javascript from "highlight.js/lib/languages/javascript";

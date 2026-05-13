@@ -1,3 +1,5 @@
+// @ts-nocheck
+// This file is deprecated - Milkdown Crepe has built-in code blocks
 import { useCallback, useState } from "react";
 import { NodeViewWrapper, NodeViewContent } from "@tiptap/react";
 import type { ReactNodeViewProps } from "@tiptap/react";

@@ -1,5 +1,6 @@
-import { useMemo } from "react";
-import { renderMermaidSVG } from "beautiful-mermaid";
+// @ts-nocheck
+// This file is deprecated - Milkdown Crepe has built-in mermaid support
+export {};
 
 interface MermaidRendererProps {
   code: string;

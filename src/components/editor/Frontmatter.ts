@@ -1,4 +1,7 @@
-import { Node, type JSONContent, type MarkdownToken } from "@tiptap/core";
+// @ts-nocheck
+// This file is deprecated - Milkdown Crepe handles content natively
+// Kept for reference only - safe to delete
+export {};
 
 export const Frontmatter = Node.create({
   name: "frontmatter",

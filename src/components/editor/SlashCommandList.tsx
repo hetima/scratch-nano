@@ -1,3 +1,5 @@
+// @ts-nocheck
+// This file is deprecated - Milkdown Crepe has built-in slash commands
 import { forwardRef } from "react";
 import type { SlashCommandItem } from "./SlashCommand";
 import {

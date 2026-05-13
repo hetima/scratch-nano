@@ -6,7 +6,8 @@ import { listen } from "@tauri-apps/api/event";
 import { TooltipProvider, Toaster } from "./components/ui";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Editor } from "./components/editor/Editor";
-import type { Editor as TiptapEditor } from "@tiptap/react";
+import { Crepe } from "@milkdown/crepe";
+import { editorViewCtx } from "@milkdown/kit/core";
 import { FolderPicker } from "./components/layout/FolderPicker";
 import { CommandPalette } from "./components/command-palette/CommandPalette";
 import { SettingsPage } from "./components/settings";
@@ -60,7 +61,7 @@ function AppContent() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  const editorRef = useRef<TiptapEditor | null>(null);
+  const editorRef = useRef<Crepe | null>(null);
 
   // Listen for set-notes-folder event from CLI (scratch .)
   // Placed here in AppContent where both NotesContext and ThemeContext are available
@@ -361,7 +362,12 @@ function AppContent() {
 
   const handleClosePalette = useCallback(() => {
     setPaletteOpen(false);
-    editorRef.current?.commands.focus();
+    const editor = editorRef.current?.editor;
+    if (editor) {
+      editor.action((ctx) => {
+        ctx.get(editorViewCtx).focus();
+      });
+    }
   }, []);
 
   if (isLoading) {

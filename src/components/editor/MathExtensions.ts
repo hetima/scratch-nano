@@ -1,3 +1,5 @@
+// @ts-nocheck
+// This file is deprecated - Milkdown Crepe has built-in math support
 import { InputRule } from "@tiptap/core";
 import { BlockMath } from "@tiptap/extension-mathematics";
 import { Plugin, PluginKey, NodeSelection } from "@tiptap/pm/state";

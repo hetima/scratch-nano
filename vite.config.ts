@@ -45,23 +45,13 @@ export default defineConfig(async () => ({
       output: {
         // Manual chunk splitting for better caching
         manualChunks: {
-          // TipTap and related editor libraries
-          "tiptap": [
-            "@tiptap/react",
-            "@tiptap/starter-kit",
-            "@tiptap/markdown",
-            "@tiptap/extension-image",
-            "@tiptap/extension-placeholder",
-            "@tiptap/extension-task-list",
-            "@tiptap/extension-task-item",
-            "@tiptap/extension-table",
-            "@tiptap/extension-table-row",
-            "@tiptap/extension-table-cell",
-            "@tiptap/extension-table-header",
-            "@tiptap/extension-code-block-lowlight",
+          // Milkdown editor
+          "milkdown": [
+            "@milkdown/crepe",
+            "@milkdown/react",
+            "@milkdown/kit",
           ],
-          // Syntax highlighting
-          "highlight": ["lowlight", "highlight.js"],
+          // Syntax highlighting (CodeMirror bundled with Milkdown)
           // React core
           "react-vendor": ["react", "react-dom"],
           // Tauri APIs
@@ -75,7 +65,7 @@ export default defineConfig(async () => ({
     },
     // Enable source maps for debugging (optional, can disable for smaller builds)
     sourcemap: false,
-    // Increase chunk size warning limit (TipTap is large)
+    // Increase chunk size warning limit
     chunkSizeWarningLimit: 1000,
   },
 
@@ -85,10 +75,9 @@ export default defineConfig(async () => ({
     include: [
       "react",
       "react-dom",
-      "@tiptap/react",
-      "@tiptap/starter-kit",
-      "@tiptap/markdown",
-      "lowlight",
+      "@milkdown/crepe",
+      "@milkdown/react",
+      "@milkdown/kit",
     ],
   },
 }));

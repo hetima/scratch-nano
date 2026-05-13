@@ -5,95 +5,35 @@ import {
   useCallback,
   useState,
 } from "react";
-import {
-  useEditor,
-  EditorContent,
-  ReactRenderer,
-  ReactNodeViewRenderer,
-  type Editor as TiptapEditor,
-} from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import Placeholder from "@tiptap/extension-placeholder";
-import { Link } from "@tiptap/extension-link";
-import Image from "@tiptap/extension-image";
-import TaskList from "@tiptap/extension-task-list";
-import TaskItem from "@tiptap/extension-task-item";
-import { TableKit } from "@tiptap/extension-table";
-import { Markdown } from "@tiptap/markdown";
-import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
-import { lowlight } from "./lowlight";
-import { CodeBlockView } from "./CodeBlockView";
-import { Extension, InputRule } from "@tiptap/core";
-import { Decoration, DecorationSet } from "@tiptap/pm/view";
-import {
-  NodeSelection,
-  Plugin,
-  PluginKey,
-  TextSelection,
-} from "@tiptap/pm/state";
-import tippy, { type Instance as TippyInstance } from "tippy.js";
+import { Crepe } from "@milkdown/crepe";
+import { Milkdown, MilkdownProvider, useEditor } from "@milkdown/react";
+import type { Editor as MilkdownEditor } from "@milkdown/kit/core";
+import { editorViewCtx, parserCtx } from "@milkdown/kit/core";
+import { Slice } from "@milkdown/kit/prose/model";
+import type { EditorView } from "@milkdown/kit/prose/view";
+import { TextSelection } from "@milkdown/kit/prose/state";
+import "@milkdown/crepe/theme/common/style.css";
+import "@milkdown/crepe/theme/nord.css";
+
+import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke, convertFileSrc } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path";
 import { toast } from "sonner";
 import { mod, alt, shift, isMac } from "../../lib/platform";
-
-// Prepend https:// if no protocol is present
-function normalizeUrl(url: string): string {
-  const trimmed = url.trim();
-  if (!trimmed) return trimmed;
-  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return trimmed;
-  return `https://${trimmed}`;
-}
-
-// Validate URL scheme for safe opening
-function isAllowedUrlScheme(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return ["http:", "https:", "mailto:"].includes(parsed.protocol);
-  } catch {
-    return false;
-  }
-}
-
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { useOptionalNotes } from "../../context/NotesContext";
 import { useTheme } from "../../context/ThemeContext";
-import { Frontmatter } from "./Frontmatter";
-import { BlockMathEditor } from "./BlockMathEditor";
-import { LinkEditor } from "./LinkEditor";
 import { SearchToolbar } from "./SearchToolbar";
-import { SlashCommand } from "./SlashCommand";
 import { EditorWidthHandles } from "./EditorWidthHandle";
-import { ScratchBlockMath, normalizeBlockMath } from "./MathExtensions";
 import { cn } from "../../lib/utils";
 import { plainTextFromMarkdown } from "../../lib/plainText";
-import { Button, IconButton, ToolbarButton, Tooltip } from "../ui";
+import { Button, IconButton, Tooltip } from "../ui";
 import * as notesService from "../../services/notes";
 import { downloadPdf, downloadMarkdown } from "../../services/pdf";
 import type { Settings } from "../../types/note";
 import {
-  BoldIcon,
-  ItalicIcon,
-  StrikethroughIcon,
-  Heading1Icon,
-  Heading2Icon,
-  Heading3Icon,
-  Heading4Icon,
-  ListIcon,
-  ListOrderedIcon,
-  CheckSquareIcon,
-  QuoteIcon,
-  CodeIcon,
-  InlineCodeIcon,
-  BlockMathIcon,
-  SeparatorIcon,
-  LinkIcon,
-  BracketsIcon,
-  ImageIcon,
-  TableIcon,
   SpinnerIcon,
   CircleCheckIcon,
   CopyIcon,
@@ -120,303 +60,70 @@ function formatDateTime(timestamp: number): string {
   });
 }
 
-function focusAndSelectTitle(editor: TiptapEditor): boolean {
-  let titleFrom = -1;
-  let titleTo = -1;
+/**
+ * Get character offsets where each top-level block starts in markdown.
+ */
+function getMarkdownBlockOffsets(md: string): number[] {
+  const offsets: number[] = [];
+  const lines = md.split("\n");
+  let pos = 0;
+  let prevBlank = true;
+  let inCodeFence = false;
 
-  editor.state.doc.descendants((node, pos) => {
-    if (node.type.name !== "heading" || node.attrs.level !== 1) {
-      return true;
+  for (const line of lines) {
+    const trimmed = line.trimStart();
+
+    if (inCodeFence) {
+      if (trimmed.startsWith("```")) {
+        inCodeFence = false;
+      }
+    } else if (trimmed.startsWith("```")) {
+      offsets.push(pos);
+      inCodeFence = true;
+      prevBlank = false;
+    } else {
+      const isBlank = trimmed === "";
+      if (!isBlank && (prevBlank || trimmed.startsWith("#"))) {
+        offsets.push(pos);
+      }
+      prevBlank = isBlank;
     }
-    titleFrom = pos + 1;
-    titleTo = pos + node.nodeSize - 1;
-    return false;
+
+    pos += line.length + 1;
+  }
+
+  return offsets;
+}
+
+/** ProseMirror position at the start of the Nth top-level block. */
+function blockIndexToPos(
+  doc: { childCount: number; child: (i: number) => { nodeSize: number } },
+  blockIndex: number,
+): number {
+  const idx = Math.max(0, Math.min(blockIndex, doc.childCount - 1));
+  let pos = 1;
+  for (let i = 0; i < idx; i++) {
+    pos += doc.child(i).nodeSize;
+  }
+  return pos;
+}
+
+/** Replace all editor content with new markdown via ProseMirror dispatch. */
+function replaceContent(editor: MilkdownEditor, markdown: string) {
+  editor.action((ctx) => {
+    const view = ctx.get(editorViewCtx);
+    const parser = ctx.get(parserCtx);
+    const doc = parser(markdown);
+    if (!doc) return;
+    const state = view.state;
+    view.dispatch(
+      state.tr.replace(
+        0,
+        state.doc.content.size,
+        new Slice(doc.content, 0, 0),
+      ),
+    );
   });
-
-  if (titleFrom < 0 || titleTo < 0) return false;
-
-  editor
-    .chain()
-    .focus()
-    .setTextSelection(
-      titleFrom === titleTo ? titleFrom : { from: titleFrom, to: titleTo },
-    )
-    .run();
-
-  return true;
-}
-
-// Standard number-field shortcuts for KaTeX (shared between inline and block math)
-const katexMacros: Record<string, string> = {
-  "\\R": "\\mathbb{R}",
-  "\\N": "\\mathbb{N}",
-  "\\Z": "\\mathbb{Z}",
-  "\\Q": "\\mathbb{Q}",
-  "\\C": "\\mathbb{C}",
-};
-
-// Search highlight extension - adds yellow backgrounds to search matches
-const searchHighlightPluginKey = new PluginKey("searchHighlight");
-
-interface SearchHighlightOptions {
-  matches: Array<{ from: number; to: number }>;
-  currentIndex: number;
-}
-
-const SearchHighlight = Extension.create<SearchHighlightOptions>({
-  name: "searchHighlight",
-
-  addOptions() {
-    return {
-      matches: [],
-      currentIndex: 0,
-    };
-  },
-
-  addProseMirrorPlugins() {
-    return [
-      new Plugin({
-        key: searchHighlightPluginKey,
-        state: {
-          init: () => DecorationSet.empty,
-          apply: (tr, oldSet) => {
-            // Map decorations through document changes
-            const set = oldSet.map(tr.mapping, tr.doc);
-
-            // Check if we need to update decorations (from transaction meta)
-            const meta = tr.getMeta(searchHighlightPluginKey);
-            if (meta !== undefined) {
-              return meta.decorationSet;
-            }
-
-            return set;
-          },
-        },
-        props: {
-          decorations: (state) => {
-            return searchHighlightPluginKey.getState(state);
-          },
-        },
-      }),
-    ];
-  },
-});
-
-// GridPicker component for table insertion
-interface GridPickerProps {
-  onSelect: (rows: number, cols: number) => void;
-}
-
-function GridPicker({ onSelect }: GridPickerProps) {
-  const [hovered, setHovered] = useState({ row: 3, col: 3 });
-
-  return (
-    <>
-      <div className="grid grid-cols-5 gap-1">
-        {Array.from({ length: 25 }).map((_, i) => {
-          const row = Math.floor(i / 5) + 1;
-          const col = (i % 5) + 1;
-          const isHighlighted = row <= hovered.row && col <= hovered.col;
-
-          return (
-            <div
-              key={i}
-              className={cn(
-                "w-5.5 h-5.5 border rounded cursor-pointer transition-colors",
-                isHighlighted
-                  ? "bg-accent/20 border-accent/50"
-                  : "border-border hover:border-accent/50",
-              )}
-              onMouseEnter={() => setHovered({ row, col })}
-              onClick={() => onSelect(row, col)}
-            />
-          );
-        })}
-      </div>
-      <p className="text-xs text-center mt-2 text-text-muted">
-        {hovered.row} × {hovered.col} table
-      </p>
-    </>
-  );
-}
-
-interface FormatBarProps {
-  editor: TiptapEditor | null;
-  onAddLink: () => void;
-  onAddBlockMath: () => void;
-  onAddImage: () => void;
-}
-
-// FormatBar must re-render with parent to reflect editor.isActive() state changes
-// (editor instance is mutable, so memo would cause stale active states)
-function FormatBar({
-  editor,
-  onAddLink,
-  onAddBlockMath,
-  onAddImage,
-}: FormatBarProps) {
-  const [tableMenuOpen, setTableMenuOpen] = useState(false);
-
-  if (!editor) return null;
-
-  return (
-    <div className="flex items-center gap-1 px-3 pb-2 border-b border-border overflow-x-auto scrollbar-none">
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBold().run()}
-        isActive={editor.isActive("bold")}
-        title={`Bold (${mod}${isMac ? "" : "+"}B)`}
-      >
-        <BoldIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleItalic().run()}
-        isActive={editor.isActive("italic")}
-        title={`Italic (${mod}${isMac ? "" : "+"}I)`}
-      >
-        <ItalicIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleStrike().run()}
-        isActive={editor.isActive("strike")}
-        title={`Strikethrough (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}S)`}
-      >
-        <StrikethroughIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-
-      <div className="w-px h-4.5 border-l border-border mx-2" />
-
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-        isActive={editor.isActive("heading", { level: 1 })}
-        title={`Heading 1 (${mod}${isMac ? "" : "+"}${alt}${isMac ? "" : "+"}1)`}
-      >
-        <Heading1Icon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-        isActive={editor.isActive("heading", { level: 2 })}
-        title={`Heading 2 (${mod}${isMac ? "" : "+"}${alt}${isMac ? "" : "+"}2)`}
-      >
-        <Heading2Icon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()}
-        isActive={editor.isActive("heading", { level: 3 })}
-        title={`Heading 3 (${mod}${isMac ? "" : "+"}${alt}${isMac ? "" : "+"}3)`}
-      >
-        <Heading3Icon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleHeading({ level: 4 }).run()}
-        isActive={editor.isActive("heading", { level: 4 })}
-        title={`Heading 4 (${mod}${isMac ? "" : "+"}${alt}${isMac ? "" : "+"}4)`}
-      >
-        <Heading4Icon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-
-      <div className="w-px h-4.5 border-l border-border mx-2" />
-
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBulletList().run()}
-        isActive={editor.isActive("bulletList")}
-        title={`Bullet List (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}8)`}
-      >
-        <ListIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleOrderedList().run()}
-        isActive={editor.isActive("orderedList")}
-        title={`Numbered List (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}7)`}
-      >
-        <ListOrderedIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleTaskList().run()}
-        isActive={editor.isActive("taskList")}
-        title="Task List"
-      >
-        <CheckSquareIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleBlockquote().run()}
-        isActive={editor.isActive("blockquote")}
-        title={`Blockquote (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}B)`}
-      >
-        <QuoteIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleCode().run()}
-        isActive={editor.isActive("code")}
-        title={`Inline Code (${mod}${isMac ? "" : "+"}E)`}
-      >
-        <InlineCodeIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().toggleCodeBlock().run()}
-        isActive={editor.isActive("codeBlock")}
-        title={`Code Block (${mod}${isMac ? "" : "+"}${alt}${isMac ? "" : "+"}C)`}
-      >
-        <CodeIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={onAddBlockMath}
-        isActive={editor.isActive("blockMath")}
-        title="Block Math"
-      >
-        <BlockMathIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton
-        onClick={() => editor.chain().focus().setHorizontalRule().run()}
-        isActive={false}
-        title="Horizontal Rule"
-      >
-        <SeparatorIcon />
-      </ToolbarButton>
-
-      <div className="w-px h-4.5 border-l border-border mx-2" />
-
-      <ToolbarButton
-        onClick={onAddLink}
-        isActive={editor.isActive("link")}
-        title={`Add Link (${mod}${isMac ? "" : "+"}K)`}
-      >
-        <LinkIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <ToolbarButton onClick={onAddImage} isActive={false} title="Add Image">
-        <ImageIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-      </ToolbarButton>
-      <DropdownMenu.Root open={tableMenuOpen} onOpenChange={setTableMenuOpen}>
-        <Tooltip content="Insert Table">
-          <DropdownMenu.Trigger asChild>
-            <ToolbarButton isActive={editor.isActive("table")}>
-              <TableIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-            </ToolbarButton>
-          </DropdownMenu.Trigger>
-        </Tooltip>
-        <DropdownMenu.Portal>
-          <DropdownMenu.Content
-            className="p-2.5 bg-bg border border-border rounded-md shadow-lg z-50"
-            onCloseAutoFocus={(e) => e.preventDefault()}
-          >
-            <GridPicker
-              onSelect={(rows, cols) => {
-                editor
-                  .chain()
-                  .focus()
-                  .insertTable({
-                    rows,
-                    cols,
-                    withHeaderRow: true,
-                  })
-                  .run();
-                setTableMenuOpen(false);
-              }}
-            />
-          </DropdownMenu.Content>
-        </DropdownMenu.Portal>
-      </DropdownMenu.Root>
-    </div>
-  );
 }
 
 // Data source for preview mode — bypasses NotesContext
@@ -436,62 +143,9 @@ interface EditorProps {
   sidebarVisible?: boolean;
   focusMode?: boolean;
   previewMode?: PreviewModeData;
-  onEditorReady?: (editor: TiptapEditor | null) => void;
+  onEditorReady?: (crepe: Crepe | null) => void;
   onSaveToFolder?: () => void;
   saveToFolderDisabled?: boolean;
-}
-
-/**
- * Get character offsets where each top-level block starts in markdown.
- * Blocks are separated by blank lines, with awareness of code fences
- * and ATX headings.
- */
-function getMarkdownBlockOffsets(md: string): number[] {
-  const offsets: number[] = [];
-  const lines = md.split("\n");
-  let pos = 0;
-  let prevBlank = true; // treat doc start as preceded by blank
-  let inCodeFence = false;
-
-  for (const line of lines) {
-    const trimmed = line.trimStart();
-
-    if (inCodeFence) {
-      // Only look for closing fence; don't start new blocks inside code
-      if (trimmed.startsWith("```")) {
-        inCodeFence = false;
-      }
-    } else if (trimmed.startsWith("```")) {
-      // Opening fence is always a block start
-      offsets.push(pos);
-      inCodeFence = true;
-      prevBlank = false;
-    } else {
-      const isBlank = trimmed === "";
-      // Start a new block after a blank line, or for ATX headings
-      if (!isBlank && (prevBlank || trimmed.startsWith("#"))) {
-        offsets.push(pos);
-      }
-      prevBlank = isBlank;
-    }
-
-    pos += line.length + 1;
-  }
-
-  return offsets;
-}
-
-/** ProseMirror position at the start of the Nth top-level block. */
-function blockIndexToPos(
-  doc: { childCount: number; child: (i: number) => { nodeSize: number } },
-  blockIndex: number,
-): number {
-  const idx = Math.max(0, Math.min(blockIndex, doc.childCount - 1));
-  let pos = 1; // 1 for doc opening token
-  for (let i = 0; i < idx; i++) {
-    pos += doc.child(i).nodeSize;
-  }
-  return pos;
 }
 
 export function Editor({
@@ -503,7 +157,30 @@ export function Editor({
   onSaveToFolder,
   saveToFolderDisabled,
 }: EditorProps) {
-  // Always call the hook (rules of hooks), but it returns null outside NotesProvider
+  return (
+    <MilkdownProvider>
+      <MilkdownEditorInner
+        onToggleSidebar={onToggleSidebar}
+        sidebarVisible={sidebarVisible}
+        focusMode={focusMode}
+        onEditorReady={onEditorReady}
+        previewMode={previewMode}
+        onSaveToFolder={onSaveToFolder}
+        saveToFolderDisabled={saveToFolderDisabled}
+      />
+    </MilkdownProvider>
+  );
+}
+
+function MilkdownEditorInner({
+  onToggleSidebar,
+  sidebarVisible,
+  focusMode,
+  onEditorReady,
+  previewMode,
+  onSaveToFolder,
+  saveToFolderDisabled,
+}: EditorProps) {
   const notesCtx = useOptionalNotes();
 
   const currentNote = previewMode
@@ -539,13 +216,12 @@ export function Editor({
   const unpinNote = notesCtx?.unpinNote;
   const notes = notesCtx?.notes;
   const { textDirection } = useTheme();
+
   const [isSaving, setIsSaving] = useState(false);
-  // Force re-render when selection changes to update toolbar active states
-  const [, setSelectionKey] = useState(0);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
-  // Delay transition classes until after initial mount to avoid format bar height animation on note load
   const [hasTransitioned, setHasTransitioned] = useState(false);
+
   useEffect(() => {
     if (!hasTransitioned && currentNote) {
       const id = requestAnimationFrame(() => setHasTransitioned(true));
@@ -553,59 +229,86 @@ export function Editor({
     }
   }, [hasTransitioned, currentNote]);
 
-  // Delay format bar / header transitions only when the sidebar needs to animate closed
   const needsSidebarDelay = focusMode && sidebarVisible;
   const isSidebarActive = sidebarVisible && !focusMode;
+
   // Source mode state
   const [sourceMode, setSourceMode] = useState(false);
   const [sourceContent, setSourceContent] = useState("");
-  const sourceTimeoutRef = useRef<number | null>(null);
   const sourceModeTransitionRef = useRef<{
     topBlockIndex: number;
     cursorBlockIndex: number;
     md?: string;
   } | null>(null);
+
   // Search state
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchMatches, setSearchMatches] = useState<
-    Array<{ from: number; to: number }>
-  >([]);
-  const [currentMatchIndex, setCurrentMatchIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
   const saveTimeoutRef = useRef<number | null>(null);
-  const linkPopupRef = useRef<TippyInstance | null>(null);
-  const blockMathPopupRef = useRef<TippyInstance | null>(null);
   const isLoadingRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const editorRef = useRef<TiptapEditor | null>(null);
   const currentNoteIdRef = useRef<string | null>(null);
-  // Track if we need to save (use ref to avoid computing markdown on every keystroke)
   const needsSaveRef = useRef(false);
   const notesCtxRef = useRef(notesCtx);
   notesCtxRef.current = notesCtx;
 
-  // Keep ref in sync with current note ID
   currentNoteIdRef.current = currentNote?.id ?? null;
 
-  // Get markdown from editor
-  const getMarkdown = useCallback(
-    (editorInstance: ReturnType<typeof useEditor>) => {
-      if (!editorInstance) return "";
-      const manager = editorInstance.storage.markdown?.manager;
-      if (manager) {
-        let markdown = manager.serialize(editorInstance.getJSON());
-        // Clean up nbsp entities that TipTap inserts (especially in table cells)
-        markdown = markdown.replace(/&nbsp;|&#160;/g, " ");
-        return markdown;
-      }
-      // Fallback to plain text
-      return editorInstance.getText();
-    },
-    [],
-  );
+  // Crepe ref to access the Crepe instance
+  const crepeRef = useRef<Crepe | null>(null);
+  // Milkdown editor ref
+  const editorRef = useRef<MilkdownEditor | null>(null);
 
-  // Load settings when note changes or notes are refreshed (e.g., after pin/unpin)
+  // Use Milkdown's useEditor hook
+  const { loading, get: getEditor } = useEditor((root) => {
+    const crepe = new Crepe({
+      root,
+      defaultValue: "# Welcome",
+      features: {
+        [Crepe.Feature.Cursor]: true,
+        [Crepe.Feature.ListItem]: true,
+        [Crepe.Feature.ImageBlock]: true,
+        [Crepe.Feature.Toolbar]: true,
+        [Crepe.Feature.CodeMirror]: true,
+        [Crepe.Feature.Table]: true,
+        [Crepe.Feature.TopBar]: true,
+        [Crepe.Feature.Placeholder]: false,
+        [Crepe.Feature.BlockEdit]: false,
+        [Crepe.Feature.LinkTooltip]: false,
+        [Crepe.Feature.Latex]: false,
+        [Crepe.Feature.AI]: false,
+      },
+      featureConfigs: {
+        
+      },
+    });
+
+    crepeRef.current = crepe;
+
+    // Listen for markdown changes for auto-save
+    crepe.on((listener) => {
+      listener.markdownUpdated((_ctx, markdown, prevMarkdown) => {
+        if (markdown !== prevMarkdown && !isLoadingRef.current) {
+          scheduleSave();
+        }
+      });
+    });
+
+    return crepe;
+  });
+
+  // Keep editorRef in sync with the Milkdown editor instance
+  useEffect(() => {
+    const editor = getEditor();
+    if (editor) {
+      editorRef.current = editor;
+      onEditorReady?.(crepeRef.current);
+    }
+  }, [loading, getEditor, onEditorReady]);
+
+  // Load settings when note changes
   useEffect(() => {
     if (currentNote?.id && !previewMode) {
       notesService
@@ -617,106 +320,13 @@ export function Editor({
     }
   }, [currentNote?.id, notes, previewMode]);
 
-  // Calculate if current note is pinned
   const isPinned =
     settings?.pinnedNoteIds?.includes(currentNote?.id || "") || false;
 
-  // Find all matches for search query (case-insensitive)
-  const findMatches = useCallback(
-    (query: string, editorInstance: TiptapEditor | null) => {
-      if (!editorInstance || !query.trim()) return [];
-
-      const doc = editorInstance.state.doc;
-      const lowerQuery = query.toLowerCase();
-      const matches: Array<{ from: number; to: number }> = [];
-
-      // Search through each text node
-      doc.descendants((node, nodePos) => {
-        if (node.isText && node.text) {
-          const text = node.text;
-          const lowerText = text.toLowerCase();
-
-          let searchPos = 0;
-          while (searchPos < lowerText.length && matches.length < 500) {
-            const index = lowerText.indexOf(lowerQuery, searchPos);
-            if (index === -1) break;
-
-            const matchFrom = nodePos + index;
-            const matchTo = matchFrom + query.length;
-
-            // Make sure the match doesn't extend beyond valid document bounds
-            if (matchTo <= doc.content.size) {
-              matches.push({
-                from: matchFrom,
-                to: matchTo,
-              });
-            }
-
-            searchPos = index + 1;
-          }
-        }
-      });
-
-      return matches;
-    },
-    [],
-  );
-
-  // Update search decorations - applies yellow backgrounds to all matches
-  const updateSearchDecorations = useCallback(
-    (
-      matches: Array<{ from: number; to: number }>,
-      currentIndex: number,
-      editorInstance: TiptapEditor | null,
-    ) => {
-      if (!editorInstance) return;
-
-      try {
-        const { state } = editorInstance;
-        const decorations: Decoration[] = [];
-
-        // Add decorations for all matches
-        matches.forEach((match, index) => {
-          const isActive = index === currentIndex;
-          decorations.push(
-            Decoration.inline(match.from, match.to, {
-              class: isActive ? "search-match-active" : "search-match",
-            }),
-          );
-        });
-
-        const decorationSet = DecorationSet.create(state.doc, decorations);
-
-        // Update decorations via transaction
-        const tr = state.tr.setMeta(searchHighlightPluginKey, {
-          decorationSet,
-        });
-
-        editorInstance.view.dispatch(tr);
-
-        // Scroll to current match
-        if (matches[currentIndex]) {
-          const match = matches[currentIndex];
-          const { node } = editorInstance.view.domAtPos(match.from);
-          const element =
-            node.nodeType === Node.ELEMENT_NODE
-              ? (node as HTMLElement)
-              : node.parentElement;
-
-          if (element) {
-            element.scrollIntoView({ behavior: "smooth", block: "center" });
-          }
-        }
-      } catch (error) {
-        console.error("Failed to update search decorations:", error);
-      }
-    },
-    [],
-  );
-
-  // Immediate save function (used for flushing)
+  // Immediate save function
   const saveImmediately = useCallback(
     async (noteId: string, content: string) => {
+      if (lastSaveRef.current?.noteId === noteId && lastSaveRef.current.content === content) return;
       setIsSaving(true);
       try {
         lastSaveRef.current = { noteId, content };
@@ -728,23 +338,21 @@ export function Editor({
     [saveNote],
   );
 
-  // Flush any pending save immediately (saves to the note currently loaded in editor)
+  // Flush any pending save
   const flushPendingSave = useCallback(async () => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = null;
     }
+    needsSaveRef.current = false;
+    if (!editorRef.current || !loadedNoteIdRef.current) return;
+    const noteId = loadedNoteIdRef.current;
+    const markdown = crepeRef.current?.getMarkdown() ?? "";
+    // Skip save if content hasn't changed since last save
+    await saveImmediately(noteId, markdown);
+  }, [saveImmediately]);
 
-    // Use loadedNoteIdRef (the note in the editor) not currentNoteIdRef (which may have changed)
-    if (needsSaveRef.current && editorRef.current && loadedNoteIdRef.current) {
-      needsSaveRef.current = false;
-      const markdown = getMarkdown(editorRef.current);
-      await saveImmediately(loadedNoteIdRef.current, markdown);
-    }
-  }, [saveImmediately, getMarkdown]);
-
-  // 保存はほぼこれで実行
-  // Schedule a debounced save (markdown computed only when timer fires)
+  // Schedule a debounced save
   const scheduleSave = useCallback(() => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -758,604 +366,73 @@ export function Editor({
       if (currentNoteIdRef.current !== savingNoteId || !needsSaveRef.current) {
         return;
       }
-
-      // Compute markdown only now, when we actually save
-      if (editorRef.current) {
+      if (crepeRef.current) {
         needsSaveRef.current = false;
-        const markdown = getMarkdown(editorRef.current);
+        const markdown = crepeRef.current.getMarkdown();
         await saveImmediately(savingNoteId, markdown);
       }
     }, 500);
-  }, [saveImmediately, getMarkdown, currentNote?.id]);
+  }, [saveImmediately, currentNote?.id]);
 
-  const closeBlockMathPopup = useCallback(() => {
-    if (blockMathPopupRef.current) {
-      blockMathPopupRef.current.destroy();
-      blockMathPopupRef.current = null;
-    }
-  }, []);
-
-  const handleEditBlockMath = useCallback(
-    (pos: number) => {
-      const currentEditor = editorRef.current;
-      if (!currentEditor) return;
-
-      if (linkPopupRef.current) {
-        linkPopupRef.current.destroy();
-        linkPopupRef.current = null;
-      }
-      closeBlockMathPopup();
-
-      const node = currentEditor.state.doc.nodeAt(pos);
-      if (!node || node.type.name !== "blockMath") {
-        return;
-      }
-
-      const virtualElement = {
-        getBoundingClientRect: () => {
-          const nodeDom = currentEditor.view.nodeDOM(pos);
-          if (nodeDom instanceof HTMLElement) {
-            return nodeDom.getBoundingClientRect();
-          }
-
-          const start = currentEditor.view.coordsAtPos(pos);
-          const end = currentEditor.view.coordsAtPos(pos + node.nodeSize);
-          const left = Math.min(start.left, end.left);
-          const top = Math.min(start.top, end.top);
-          const right = Math.max(start.right, end.right);
-          const bottom = Math.max(start.bottom, end.bottom);
-
-          return {
-            width: Math.max(2, right - left),
-            height: Math.max(20, bottom - top),
-            top,
-            left,
-            right,
-            bottom,
-            x: left,
-            y: top,
-            toJSON: () => ({}),
-          } as DOMRect;
-        },
-      };
-
-      const component = new ReactRenderer(BlockMathEditor, {
-        props: {
-          initialLatex: String(node.attrs.latex ?? ""),
-          onSubmit: (latex: string) => {
-            const trimmed = latex.trim();
-            if (!trimmed) {
-              toast.error("Please enter a formula.");
-              return;
-            }
-            currentEditor
-              .chain()
-              .focus()
-              .updateBlockMath({ pos, latex: trimmed })
-              .setTextSelection(pos + node.nodeSize)
-              .run();
-            closeBlockMathPopup();
-          },
-          onCancel: () => {
-            // Move cursor after the node instead of restoring the NodeSelection,
-            // which would re-trigger native DOM selection highlight bleed
-            currentEditor
-              .chain()
-              .focus()
-              .setTextSelection(pos + node.nodeSize)
-              .run();
-            closeBlockMathPopup();
-          },
-        },
-        editor: currentEditor,
-      });
-
-      blockMathPopupRef.current = tippy(document.body, {
-        getReferenceClientRect: () =>
-          virtualElement.getBoundingClientRect() as DOMRect,
-        appendTo: () => document.body,
-        content: component.element,
-        showOnCreate: true,
-        interactive: true,
-        trigger: "manual",
-        placement: "bottom-start",
-        offset: [0, 8],
-        onDestroy: () => {
-          component.destroy();
-        },
-      });
-    },
-    [closeBlockMathPopup],
-  );
-
-  const handleAddBlockMath = useCallback(() => {
-    const currentEditor = editorRef.current;
-    if (!currentEditor) return;
-
-    closeBlockMathPopup();
-    if (linkPopupRef.current) {
-      linkPopupRef.current.destroy();
-      linkPopupRef.current = null;
-    }
-    const { selection, doc } = currentEditor.state;
-    const { from, to, empty, $from } = selection;
-
-    if (
-      selection instanceof NodeSelection &&
-      selection.node.type.name === "blockMath"
-    ) {
-      handleEditBlockMath(from);
-      return;
-    }
-
-    if (!empty) {
-      const selectedNode = doc.nodeAt(from);
-      if (
-        selectedNode?.type.name === "blockMath" &&
-        from + selectedNode.nodeSize === to
-      ) {
-        handleEditBlockMath(from);
-        return;
-      }
-    }
-
-    if (empty) {
-      const nodeBefore = $from.nodeBefore;
-      if (nodeBefore?.type.name === "blockMath") {
-        handleEditBlockMath(from - nodeBefore.nodeSize);
-        return;
-      }
-      const nodeAfter = $from.nodeAfter;
-      if (nodeAfter?.type.name === "blockMath") {
-        handleEditBlockMath(from);
-        return;
-      }
-    }
-
-    const selectedText = empty ? "" : doc.textBetween(from, to, "\n");
-    const initialLatex = normalizeBlockMath(selectedText);
-    const targetRange = { from, to };
-    const hasSelection = from !== to;
-
-    const virtualElement = {
-      getBoundingClientRect: () => {
-        if (hasSelection) {
-          const startPos = currentEditor.view.domAtPos(from);
-          const endPos = currentEditor.view.domAtPos(to);
-
-          if (startPos && endPos) {
-            try {
-              const range = document.createRange();
-              range.setStart(startPos.node, startPos.offset);
-              range.setEnd(endPos.node, endPos.offset);
-              return range.getBoundingClientRect();
-            } catch (error) {
-              console.error("Block math range creation failed:", error);
-            }
-          }
-        }
-
-        const coords = currentEditor.view.coordsAtPos(from);
-        return {
-          width: 2,
-          height: 20,
-          top: coords.top,
-          left: coords.left,
-          right: coords.right,
-          bottom: coords.bottom,
-          x: coords.left,
-          y: coords.top,
-          toJSON: () => ({}),
-        } as DOMRect;
-      },
-    };
-
-    const component = new ReactRenderer(BlockMathEditor, {
-      props: {
-        initialLatex,
-        onSubmit: (latex: string) => {
-          const normalizedLatex = latex.trim();
-          if (!normalizedLatex) {
-            toast.error("Please enter a formula.");
-            return;
-          }
-
-          const inserted = currentEditor
-            .chain()
-            .focus()
-            .insertContentAt(targetRange, {
-              type: "blockMath",
-              attrs: { latex: normalizedLatex },
-            })
-            .command(({ state, tr, dispatch }) => {
-              if (!dispatch) return true;
-
-              const { $to } = tr.selection;
-              if ($to.nodeAfter?.isTextblock) {
-                tr.setSelection(TextSelection.create(tr.doc, $to.pos + 1));
-                tr.scrollIntoView();
-                return true;
-              }
-
-              const paragraphType =
-                state.schema.nodes.paragraph ??
-                $to.parent.type.contentMatch.defaultType;
-              const paragraphNode = paragraphType?.create();
-              const insertPos = $to.nodeAfter ? $to.pos : $to.end();
-
-              if (paragraphNode) {
-                const $insertPos = tr.doc.resolve(insertPos);
-                if (
-                  $insertPos.parent.canReplaceWith(
-                    $insertPos.index(),
-                    $insertPos.index(),
-                    paragraphNode.type,
-                  )
-                ) {
-                  tr.insert(insertPos, paragraphNode);
-                  tr.setSelection(TextSelection.create(tr.doc, insertPos + 1));
-                  tr.scrollIntoView();
-                  return true;
-                }
-              }
-
-              tr.scrollIntoView();
-              return true;
-            })
-            .run();
-
-          if (inserted) {
-            closeBlockMathPopup();
-          }
-        },
-        onCancel: () => {
-          currentEditor.commands.focus();
-          closeBlockMathPopup();
-        },
-      },
-      editor: currentEditor,
-    });
-
-    blockMathPopupRef.current = tippy(document.body, {
-      getReferenceClientRect: () =>
-        virtualElement.getBoundingClientRect() as DOMRect,
-      appendTo: () => document.body,
-      content: component.element,
-      showOnCreate: true,
-      interactive: true,
-      trigger: "manual",
-      placement: "bottom-start",
-      offset: [0, 8],
-      onDestroy: () => {
-        component.destroy();
-      },
-    });
-  }, [closeBlockMathPopup, handleEditBlockMath]);
-
-  const editor = useEditor({
-    textDirection,
-    extensions: [
-      StarterKit.configure({
-        heading: {
-          levels: [1, 2, 3, 4, 5, 6],
-        },
-        codeBlock: false,
-        link: false,
-      }),
-      CodeBlockLowlight.extend({
-        addNodeView() {
-          return ReactNodeViewRenderer(CodeBlockView);
-        },
-      }).configure({
-        lowlight,
-        defaultLanguage: null,
-      }),
-      Placeholder.configure({
-        placeholder: "Start writing...",
-      }),
-      Link.configure({
-        openOnClick: true,
-        linkOnPaste: false,
-        HTMLAttributes: {
-          class: "underline cursor-pointer",
-        },
-        autolink: true,
-      }),
-      // Convert markdown link syntax [text](url) into real links when typed
-      Extension.create({
-        name: "markdownLinkInputRule",
-        addInputRules() {
-          return [
-            new InputRule({
-              find: /\[([^\]]+)\]\(([^)]+)\)$/,
-              handler: ({ state, range, match, commands }) => {
-                const [, text, rawUrl] = match;
-                const url = normalizeUrl(rawUrl);
-                commands.command(({ tr }) => {
-                  const linkMark = state.schema.marks.link.create({
-                    href: url,
-                  });
-                  const textNode = state.schema.text(text, [linkMark]);
-                  tr.replaceWith(range.from, range.to, textNode);
-                  return true;
-                });
-              },
-            }),
-          ];
-        },
-      }),
-      Image.configure({
-        inline: false,
-        allowBase64: false,
-      }),
-      TaskList,
-      TaskItem.configure({
-        nested: true,
-      }),
-      TableKit.configure({
-        table: {
-          resizable: false,
-          HTMLAttributes: {
-            class: "not-prose",
-          },
-        },
-      }),
-      Frontmatter,
-      Markdown.configure({}),
-      SearchHighlight.configure({
-        matches: [],
-        currentIndex: 0,
-      }),
-      SlashCommand,
-      ScratchBlockMath.configure({
-        katexOptions: {
-          throwOnError: false,
-          displayMode: true,
-          macros: katexMacros,
-        },
-        onClick: (_node, pos) => {
-          handleEditBlockMath(pos);
-        },
-      }),
-    ],
-    editorProps: {
-      attributes: {
-        class:
-          "prose prose-lg dark:prose-invert max-w-3xl mx-auto focus:outline-none min-h-full px-6 pt-8 pb-24",
-      },
-      // Serialize copied text as markdown instead of plain text
-      clipboardTextSerializer: (slice) => {
-        const fallback = slice.content.textBetween(
-          0,
-          slice.content.size,
-          "\n\n",
-        );
-        const currentEditor = editorRef.current;
-        const manager = currentEditor?.storage.markdown?.manager;
-        if (!currentEditor || !manager) return fallback;
-        try {
-          const doc = currentEditor.schema.topNodeType.create(
-            null,
-            slice.content,
-          );
-          return manager.serialize(doc.toJSON());
-        } catch {
-          return fallback;
-        }
-      },
-      // Trap Tab key inside the editor
-      handleKeyDown: (_view, event) => {
-        if (event.key === "Tab") {
-          // Allow default tab behavior (indent in lists, etc.)
-          // but prevent focus from leaving the editor
-          return false;
-        }
-        return false;
-      },
-      // Handle markdown and image paste
-      handlePaste: (_view, event) => {
-        const clipboardData = event.clipboardData;
-        if (!clipboardData) return false;
-
-        // Check for images first
-        const items = Array.from(clipboardData.items);
-        const imageItem = items.find((item) => item.type.startsWith("image/"));
-
-        if (imageItem) {
-          const blob = imageItem.getAsFile();
-          if (blob) {
-            // Convert blob to base64 and handle async operations
-            const reader = new FileReader();
-            reader.onload = async () => {
-              const base64 = (reader.result as string).split(",")[1]; // Remove data:image/...;base64, prefix
-
-              try {
-                // Save clipboard image
-                const relativePath = await invoke<string>(
-                  "save_clipboard_image",
-                  { base64Data: base64 },
-                );
-
-                // Get notes folder and construct absolute path using Tauri's join
-                const notesFolder = await invoke<string>("get_notes_folder");
-                const absolutePath = await join(notesFolder, relativePath);
-
-                // Convert to Tauri asset URL
-                const assetUrl = convertFileSrc(absolutePath);
-
-                // Insert image
-                editorRef.current
-                  ?.chain()
-                  .focus()
-                  .setImage({ src: assetUrl })
-                  .run();
-              } catch (error) {
-                console.error("Failed to paste image:", error);
-                toast.error("Failed to paste image");
-              }
-            };
-            reader.onerror = () => {
-              console.error("Failed to read clipboard image:", reader.error);
-              toast.error("Failed to read clipboard image");
-            };
-            reader.readAsDataURL(blob);
-            return true; // Handled
-          }
-        }
-
-        // Handle markdown text paste
-        const text = clipboardData.getData("text/plain");
-        if (!text) return false;
-
-        // Check if text looks like markdown (has common markdown patterns)
-        const markdownPatterns =
-          /^#{1,6}\s|^\s*[-*+]\s|^\s*\d+\.\s|^\s*>\s|```|^\s*\[.*\]\(.*\)|^\s*!\[|\*\*.*\*\*|__.*__|~~.*~~|^\s*[-*_]{3,}\s*$|^\|.+\||\$\$[\s\S]+?\$\$/m;
-        if (!markdownPatterns.test(text)) {
-          // Not markdown, let TipTap handle it normally
-          return false;
-        }
-
-        // Parse markdown and insert using editor ref
-        const currentEditor = editorRef.current;
-        if (!currentEditor) return false;
-
-        const manager = currentEditor.storage.markdown?.manager;
-        if (manager && typeof manager.parse === "function") {
-          try {
-            const parsed = manager.parse(text);
-            if (parsed) {
-              currentEditor.commands.insertContent(parsed);
-              return true;
-            }
-          } catch {
-            // Fall back to default paste behavior
-          }
-        }
-
-        return false;
-      },
-    },
-    onCreate: ({ editor: editorInstance }) => {
-      editorRef.current = editorInstance;
-    },
-    onUpdate: () => {
-      if (isLoadingRef.current) return;
-      scheduleSave();
-    },
-    onSelectionUpdate: () => {
-      // Trigger re-render to update toolbar active states
-      setSelectionKey((k) => k + 1);
-    },
-    // Prevent flash of unstyled content during initial render
-    immediatelyRender: false,
-  });
-
-  // Track which note's content is currently loaded in the editor
+  // Track which note is loaded
   const loadedNoteIdRef = useRef<string | null>(null);
-  // Track the modified timestamp of the loaded content
   const loadedModifiedRef = useRef<number | null>(null);
-  // Track the last save (note ID and content) to detect our own saves vs external changes
   const lastSaveRef = useRef<{ noteId: string; content: string } | null>(null);
-  // Track reloadVersion to detect manual refreshes
   const lastReloadVersionRef = useRef(0);
 
-  // Notify parent component when editor is ready
-  useEffect(() => {
-    onEditorReady?.(editor);
-  }, [editor, onEditorReady]);
-
-
-  // Search navigation functions (defined after editor is created)
-  const goToNextMatch = useCallback(() => {
-    if (searchMatches.length === 0 || !editor) return;
-    const nextIndex = (currentMatchIndex + 1) % searchMatches.length;
-    setCurrentMatchIndex(nextIndex);
-    updateSearchDecorations(searchMatches, nextIndex, editor);
-  }, [searchMatches, currentMatchIndex, editor, updateSearchDecorations]);
-
-  const goToPreviousMatch = useCallback(() => {
-    if (searchMatches.length === 0 || !editor) return;
-    const prevIndex =
-      (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
-    setCurrentMatchIndex(prevIndex);
-    updateSearchDecorations(searchMatches, prevIndex, editor);
-  }, [searchMatches, currentMatchIndex, editor, updateSearchDecorations]);
-
-  // Handle search query change
-  const handleSearchChange = useCallback((query: string) => {
-    setSearchQuery(query);
+  // Search navigation
+  const openEditorSearch = useCallback(() => {
+    setSearchOpen(true);
+    requestAnimationFrame(() => {
+      searchInputRef.current?.focus();
+    });
   }, []);
 
-  // Debounced search effect
+  // Cmd+F to open search
   useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchMatches([]);
-      setCurrentMatchIndex(0);
-      // Clear decorations when search is empty
-      if (editor) {
-        updateSearchDecorations([], 0, editor);
-      }
-      return;
-    }
-
-    const timer = setTimeout(() => {
-      if (!editor) return;
-      const matches = findMatches(searchQuery, editor);
-      setSearchMatches(matches);
-      setCurrentMatchIndex(0);
-      // Always update decorations (clears old highlights when no matches)
-      updateSearchDecorations(matches, 0, editor);
-    }, 150);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery, editor, findMatches, updateSearchDecorations]);
-
-  // Handle clicks on external links
-  useEffect(() => {
-    if (!editor) return;
-
-    const handleEditorClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-
-      // Prevent links from opening unless Cmd/Ctrl+Click
-      const link = target.closest("a");
-      if (link) {
-        e.preventDefault();
-        if ((e.metaKey || e.ctrlKey) && link.href) {
-          // Use raw href attribute and normalize to handle protocol-less URLs
-          const rawHref = link.getAttribute("href") ?? "";
-          const normalizedHref = normalizeUrl(rawHref);
-          if (isAllowedUrlScheme(normalizedHref)) {
-            openUrl(normalizedHref).catch((error) =>
-              console.error("Failed to open link:", error),
-            );
-          } else {
-            toast.error("Cannot open links with this URL scheme");
-          }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "f"
+      ) {
+        if (!currentNote || loading) return;
+        const target = e.target as HTMLElement;
+        const tagName = target.tagName.toLowerCase();
+        if (
+          (tagName === "input" || tagName === "textarea") &&
+          !target.closest(".milkdown")
+        ) {
+          return;
         }
+        if (target.closest('[class*="sidebar"]')) {
+          return;
+        }
+        e.preventDefault();
+        openEditorSearch();
       }
     };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [loading, currentNote, openEditorSearch]);
 
-    const editorElement = editor.view.dom;
-    editorElement.addEventListener("click", handleEditorClick);
-
-    return () => {
-      editorElement.removeEventListener("click", handleEditorClick);
-    };
-  }, [editor]);
+  // Clear search on note switch
+  useEffect(() => {
+    if (currentNote?.id) {
+      setSearchOpen(false);
+      setSearchQuery("");
+    }
+  }, [currentNote?.id]);
 
   // Load note content when the current note changes
   useEffect(() => {
-    // Skip if no note or editor
-    if (!currentNote || !editor) {
-      return;
-    }
+    if (!currentNote || loading) return;
+    const editor = getEditor();
+    if (!editor) return;
 
     const isSameNote = currentNote.id === loadedNoteIdRef.current;
 
-    // Detect rename BEFORE flush to prevent stale-ID saves from creating duplicates.
-    // When a save renames the file (title changed), the ID changes but we're still
-    // editing the same note. Update loadedNoteIdRef first so any flush uses the new ID.
+    // Detect rename
     if (!isSameNote) {
       const lastSave = lastSaveRef.current;
       if (
@@ -1365,7 +442,6 @@ export function Editor({
         loadedNoteIdRef.current = currentNote.id;
         loadedModifiedRef.current = currentNote.modified;
         lastSaveRef.current = null;
-        // If user typed during the rename, flush with the now-correct ID
         if (needsSaveRef.current) {
           flushPendingSave();
         }
@@ -1373,42 +449,33 @@ export function Editor({
       }
     }
 
-    // Flush any pending save before switching to a different note
-    if (!isSameNote && needsSaveRef.current) {
-      flushPendingSave();
+    // Save current note immediately before switching (only if content changed)
+    if (!isSameNote && loadedNoteIdRef.current && crepeRef.current) {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
+      }
+      needsSaveRef.current = false;
+      const markdown = crepeRef.current.getMarkdown();
+      saveImmediately(loadedNoteIdRef.current, markdown);
     }
-    // Reset source mode when genuinely switching notes (renames return early above)
+
+    // Reset source mode when switching notes
     if (!isSameNote) {
       setSourceMode(false);
-      if (sourceTimeoutRef.current) {
-        clearTimeout(sourceTimeoutRef.current);
-        sourceTimeoutRef.current = null;
-      }
     }
-    // Check if this is a manual reload (user clicked Refresh button or pressed Cmd+R)
+
     const isManualReload = reloadVersion !== lastReloadVersionRef.current;
 
     if (isSameNote) {
       if (isManualReload) {
-        // Manual reload - update the editor content
         lastReloadVersionRef.current = reloadVersion;
         loadedModifiedRef.current = currentNote.modified;
         isLoadingRef.current = true;
-        const manager = editor.storage.markdown?.manager;
-        if (manager) {
-          try {
-            const parsed = manager.parse(currentNote.content);
-            editor.commands.setContent(parsed);
-          } catch {
-            editor.commands.setContent(currentNote.content);
-          }
-        } else {
-          editor.commands.setContent(currentNote.content);
-        }
+        replaceContent(editor, currentNote.content);
         isLoadingRef.current = false;
         return;
       }
-      // Just a save - update refs but don't reload content
       loadedModifiedRef.current = currentNote.modified;
       return;
     }
@@ -1422,376 +489,78 @@ export function Editor({
 
     isLoadingRef.current = true;
 
-    // Blur editor before setting content to prevent ghost cursor
-    editor.commands.blur();
+    replaceContent(editor, currentNote.content);
 
-    // Parse markdown and set content
-    const manager = editor.storage.markdown?.manager;
-    if (manager) {
-      try {
-        const parsed = manager.parse(currentNote.content);
-        editor.commands.setContent(parsed);
-      } catch {
-        // Fallback to plain text if parsing fails
-        editor.commands.setContent(currentNote.content);
-      }
-    } else {
-      editor.commands.setContent(currentNote.content);
-    }
+    // Record loaded content so flushAndSave can skip if nothing changed
+    lastSaveRef.current = { noteId: loadingNoteId, content: currentNote.content };
 
-    // Scroll to top after content is set (must be after setContent to work reliably)
     scrollContainerRef.current?.scrollTo(0, 0);
 
-    // Capture note ID to check in RAF callback - prevents race condition
-    // if user switches notes quickly before RAF fires
     requestAnimationFrame(() => {
-      // Bail if a different note started loading
-      if (loadedNoteIdRef.current !== loadingNoteId) {
-        return;
-      }
-
-      // Scroll again in RAF to ensure it takes effect after DOM updates
+      if (loadedNoteIdRef.current !== loadingNoteId) return;
       scrollContainerRef.current?.scrollTo(0, 0);
-
       isLoadingRef.current = false;
 
       if (consumePendingNewNote?.(loadingNoteId)) {
-        if (!focusAndSelectTitle(editor)) {
-          editor.commands.focus("start");
-        }
         return;
       }
 
-      // For brand new empty notes, focus and select all so user can start typing
-      // Skip if the note list has focus (e.g. keyboard navigation with arrow keys)
       if ((isNewNote || wasEmpty) && currentNote.content.trim() === "") {
         const noteListFocused =
           document.activeElement?.closest("[data-note-list]");
         if (!noteListFocused) {
-          editor.commands.focus("start");
-          editor.commands.selectAll();
+          // Focus editor
         }
       }
-      // For existing notes, don't auto-focus - let user click where they want
     });
   }, [
     currentNote,
-    editor,
+    loading,
+    getEditor,
     flushPendingSave,
+    saveImmediately,
     reloadVersion,
     consumePendingNewNote,
   ]);
 
-  // Scroll to top on mount (e.g., when returning from settings)
+  // Scroll to top on mount
   useEffect(() => {
     scrollContainerRef.current?.scrollTo(0, 0);
   }, []);
 
-  // Cleanup on unmount - flush pending saves
+  // Cleanup on unmount — save immediately if there are unsaved changes
   useEffect(() => {
     return () => {
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = null;
       }
-      // Flush any pending save before unmounting
-      if (needsSaveRef.current && editorRef.current) {
+      if (loadedNoteIdRef.current && crepeRef.current) {
         needsSaveRef.current = false;
-        const manager = editorRef.current.storage.markdown?.manager;
-        const markdown = manager
-          ? manager.serialize(editorRef.current.getJSON())
-          : editorRef.current.getText();
-        // Fire and forget - save will complete in background
-        saveNote(markdown);
-      }
-      if (linkPopupRef.current) {
-        linkPopupRef.current.destroy();
-      }
-      if (blockMathPopupRef.current) {
-        blockMathPopupRef.current.destroy();
+        const markdown = crepeRef.current.getMarkdown();
+        saveImmediately(loadedNoteIdRef.current, markdown);
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only run cleanup on unmount, not when saveNote changes
-
-  // Link handlers - show inline popup at cursor position
-  const handleAddLink = useCallback(() => {
-    if (!editor) return;
-
-    // Close block math popup if open (popups are mutually exclusive)
-    closeBlockMathPopup();
-
-    // Destroy existing popup if any
-    if (linkPopupRef.current) {
-      linkPopupRef.current.destroy();
-      linkPopupRef.current = null;
-    }
-
-    // Get existing link URL if cursor is on a link
-    const existingUrl = editor.getAttributes("link").href || "";
-
-    // Get selection bounds for popup placement using DOM Range for accurate multi-line support
-    const { from, to } = editor.state.selection;
-    const hasSelection = from !== to;
-
-    // Create a virtual element at the selection for tippy to anchor to
-    const virtualElement = {
-      getBoundingClientRect: () => {
-        // For selections with text, use DOM Range for accurate bounds
-        if (hasSelection) {
-          const startPos = editor.view.domAtPos(from);
-          const endPos = editor.view.domAtPos(to);
-
-          if (startPos && endPos) {
-            try {
-              const range = document.createRange();
-              range.setStart(startPos.node, startPos.offset);
-              range.setEnd(endPos.node, endPos.offset);
-              return range.getBoundingClientRect();
-            } catch (e) {
-              // Fallback if range creation fails
-              console.error("Range creation failed:", e);
-            }
-          }
-        }
-
-        // For collapsed cursor, use coordsAtPos with proper viewport positioning
-        const coords = editor.view.coordsAtPos(from);
-
-        // Create a DOMRect-like object with proper positioning
-        return {
-          width: 2,
-          height: 20,
-          top: coords.top,
-          left: coords.left,
-          right: coords.right,
-          bottom: coords.bottom,
-          x: coords.left,
-          y: coords.top,
-          toJSON: () => ({}),
-        } as DOMRect;
-      },
-    };
-
-    // Create the link editor component
-    const component = new ReactRenderer(LinkEditor, {
-      props: {
-        initialUrl: existingUrl,
-        // Only show text input if there's no selection AND not editing an existing link
-        initialText: hasSelection || existingUrl ? undefined : "",
-        onSubmit: (url: string, text?: string) => {
-          const normalizedUrl = normalizeUrl(url);
-          if (normalizedUrl) {
-            if (text !== undefined) {
-              // No selection case - insert new link with text
-              if (text.trim()) {
-                editor
-                  .chain()
-                  .focus()
-                  .insertContent({
-                    type: "text",
-                    text: text.trim(),
-                    marks: [{ type: "link", attrs: { href: normalizedUrl } }],
-                  })
-                  .run();
-              }
-            } else {
-              // Has selection - apply link to selection
-              editor
-                .chain()
-                .focus()
-                .extendMarkRange("link")
-                .setLink({ href: normalizedUrl })
-                .run();
-            }
-          } else {
-            editor.chain().focus().extendMarkRange("link").unsetLink().run();
-          }
-          linkPopupRef.current?.destroy();
-          linkPopupRef.current = null;
-        },
-        onRemove: () => {
-          editor.chain().focus().extendMarkRange("link").unsetLink().run();
-          linkPopupRef.current?.destroy();
-          linkPopupRef.current = null;
-        },
-        onCancel: () => {
-          editor.commands.focus();
-          linkPopupRef.current?.destroy();
-          linkPopupRef.current = null;
-        },
-      },
-      editor,
-    });
-
-    // Create tippy popup
-    linkPopupRef.current = tippy(document.body, {
-      getReferenceClientRect: () =>
-        virtualElement.getBoundingClientRect() as DOMRect,
-      appendTo: () => document.body,
-      content: component.element,
-      showOnCreate: true,
-      interactive: true,
-      trigger: "manual",
-      placement: "bottom-start",
-      offset: [0, 8],
-      onDestroy: () => {
-        component.destroy();
-      },
-    });
-  }, [editor, closeBlockMathPopup]);
-
-  // Image handler
-  const handleAddImage = useCallback(async () => {
-    if (!editor) return;
-    const selected = await openDialog({
-      multiple: false,
-      filters: [
-        {
-          name: "Images",
-          extensions: ["png", "jpg", "jpeg", "gif", "webp", "svg"],
-        },
-      ],
-    });
-    if (selected) {
-      try {
-        // Copy image to assets folder and get relative path (assets/filename.ext)
-        const relativePath = await invoke<string>("copy_image_to_assets", {
-          sourcePath: selected as string,
-        });
-
-        // Get notes folder and construct absolute path using Tauri's join
-        const notesFolder = await invoke<string>("get_notes_folder");
-        const absolutePath = await join(notesFolder, relativePath);
-
-        // Convert to Tauri asset URL
-        const assetUrl = convertFileSrc(absolutePath);
-
-        // Insert image with asset URL
-        editor.chain().focus().setImage({ src: assetUrl }).run();
-      } catch (error) {
-        console.error("Failed to add image:", error);
-      }
-    }
-  }, [editor]);
-
-  // Listen for slash command image insertion
-  useEffect(() => {
-    const handler = () => handleAddImage();
-    window.addEventListener("slash-command-image", handler);
-    return () => window.removeEventListener("slash-command-image", handler);
-  }, [handleAddImage]);
-
-  // Listen for slash command block math insertion
-  useEffect(() => {
-    const handler = () => handleAddBlockMath();
-    window.addEventListener("slash-command-block-math", handler);
-    return () =>
-      window.removeEventListener("slash-command-block-math", handler);
-  }, [handleAddBlockMath]);
-
-  // Keyboard shortcut for Cmd+K to add link (only when editor is focused)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
-        // Only handle if we're in the editor
-        const target = e.target as HTMLElement;
-        const isInEditor = target.closest(".ProseMirror");
-        if (isInEditor && editor) {
-          e.preventDefault();
-          handleAddLink();
-        }
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [handleAddLink, editor]);
-
-  // Keyboard shortcut for Cmd+Shift+C to open copy menu
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "c") {
-        e.preventDefault();
-        setCopyMenuOpen(true);
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
   }, []);
-
-  // Open and focus editor search (supports repeated Cmd/Ctrl+F)
-  const openEditorSearch = useCallback(() => {
-    setSearchOpen(true);
-    requestAnimationFrame(() => {
-      searchInputRef.current?.focus();
-    });
-  }, []);
-
-  // Cmd+F to open search (works when document/editor area is focused)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        !e.shiftKey &&
-        e.key.toLowerCase() === "f"
-      ) {
-        if (!currentNote || !editor) return;
-
-        const target = e.target as HTMLElement;
-        const tagName = target.tagName.toLowerCase();
-
-        // Don't intercept if user is in an input/textarea (except the editor itself)
-        if (
-          (tagName === "input" || tagName === "textarea") &&
-          !target.closest(".ProseMirror")
-        ) {
-          return;
-        }
-
-        // Don't intercept if in sidebar
-        if (target.closest('[class*="sidebar"]')) {
-          return;
-        }
-
-        // Open search for the editor
-        e.preventDefault();
-        openEditorSearch();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [editor, currentNote, openEditorSearch]);
-
-  // Clear search on note switch
-  useEffect(() => {
-    if (currentNote?.id) {
-      setSearchOpen(false);
-      setSearchQuery("");
-      setSearchMatches([]);
-      setCurrentMatchIndex(0);
-      // Clear decorations
-      if (editor) {
-        updateSearchDecorations([], 0, editor);
-      }
-    }
-  }, [currentNote?.id, editor, updateSearchDecorations]);
 
   // Copy handlers
   const handleCopyMarkdown = useCallback(async () => {
-    if (!editor) return;
+    if (!crepeRef.current) return;
     try {
-      const markdown = getMarkdown(editor);
+      const markdown = crepeRef.current.getMarkdown();
       await invoke("copy_to_clipboard", { text: markdown });
       toast.success("Copied as Markdown");
     } catch (error) {
       console.error("Failed to copy markdown:", error);
       toast.error("Failed to copy");
     }
-  }, [editor, getMarkdown]);
+  }, []);
 
   const handleCopyPlainText = useCallback(async () => {
-    if (!editor) return;
+    if (!crepeRef.current) return;
     try {
-      const markdown = getMarkdown(editor);
+      const markdown = crepeRef.current.getMarkdown();
       const plainText = plainTextFromMarkdown(markdown);
       await invoke("copy_to_clipboard", { text: plainText });
       toast.success("Copied as plain text");
@@ -1799,32 +568,35 @@ export function Editor({
       console.error("Failed to copy plain text:", error);
       toast.error("Failed to copy");
     }
-  }, [editor, getMarkdown]);
+  }, []);
 
   const handleCopyHtml = useCallback(async () => {
+    const editor = getEditor();
     if (!editor) return;
     try {
-      const html = editor.getHTML();
+      const view = editor.ctx.get(editorViewCtx);
+      const div = document.createElement("div");
+      div.innerHTML = view.dom.innerHTML;
+      const html = div.innerHTML;
       await invoke("copy_to_clipboard", { text: html });
       toast.success("Copied as HTML");
     } catch (error) {
       console.error("Failed to copy HTML:", error);
       toast.error("Failed to copy");
     }
-  }, [editor]);
+  }, [getEditor]);
 
   // Download handlers
   const handleDownloadPdf = useCallback(async () => {
-    if (!editor || !currentNote) return;
+    if (!currentNote) return;
     try {
-      await downloadPdf(editor, currentNote.title);
+      await downloadPdf(currentNote.title);
     } catch (error) {
       console.error("Failed to open print dialog:", error);
       toast.error("Failed to open print dialog");
     }
-  }, [editor, currentNote]);
+  }, [currentNote]);
 
-  // Listen for Cmd+P print shortcut
   useEffect(() => {
     const handler = () => handleDownloadPdf();
     window.addEventListener("print-note", handler);
@@ -1832,9 +604,9 @@ export function Editor({
   }, [handleDownloadPdf]);
 
   const handleDownloadMarkdown = useCallback(async () => {
-    if (!editor || !currentNote) return;
+    if (!crepeRef.current || !currentNote) return;
     try {
-      const markdown = getMarkdown(editor);
+      const markdown = crepeRef.current.getMarkdown();
       const saved = await downloadMarkdown(markdown, currentNote.title);
       if (saved) {
         toast.success("Markdown saved successfully");
@@ -1843,30 +615,29 @@ export function Editor({
       console.error("Failed to download markdown:", error);
       toast.error("Failed to save markdown");
     }
-  }, [editor, currentNote, getMarkdown]);
+  }, [currentNote]);
 
-  // Toggle source mode — computes anchor data and toggles state;
-  // focus/scroll restoration happens in the useLayoutEffect below.
+  // Toggle source mode
   const toggleSourceMode = useCallback(() => {
+    const editor = getEditor();
     if (!editor) return;
     const container = scrollContainerRef.current;
+    const view = editor.ctx.get(editorViewCtx);
 
     if (!sourceMode) {
-      // === Entering source mode (TipTap → textarea) ===
-      const md = getMarkdown(editor);
+      const md = crepeRef.current?.getMarkdown() ?? "";
 
-      // Find which top-level block is at the viewport top
       let topBlockIndex = 0;
       if (container) {
         const rect = container.getBoundingClientRect();
         try {
-          const topPos = editor.view.posAtCoords({
+          const topPos = view.posAtCoords({
             left: rect.left + rect.width / 2,
             top: rect.top + 10,
           });
           if (topPos) {
-            const resolved = editor.state.doc.resolve(
-              Math.min(topPos.pos, editor.state.doc.content.size),
+            const resolved = view.state.doc.resolve(
+              Math.min(topPos.pos, view.state.doc.content.size),
             );
             topBlockIndex = resolved.index(0);
           }
@@ -1875,28 +646,29 @@ export function Editor({
         }
       }
 
-      // Find which block the cursor is in
       let cursorBlockIndex = 0;
       try {
-        const { from } = editor.state.selection;
-        const resolved = editor.state.doc.resolve(
-          Math.min(from, editor.state.doc.content.size),
+        const { from } = view.state.selection;
+        const resolved = view.state.doc.resolve(
+          Math.min(from, view.state.doc.content.size),
         );
         cursorBlockIndex = resolved.index(0);
       } catch {
         // resolve can fail at edges
       }
 
-      sourceModeTransitionRef.current = { topBlockIndex, cursorBlockIndex, md };
+      sourceModeTransitionRef.current = {
+        topBlockIndex,
+        cursorBlockIndex,
+        md,
+      };
       setSourceContent(md);
       setSourceMode(true);
     } else {
-      // === Exiting source mode (textarea → TipTap) ===
       const textarea = container?.querySelector(
         "textarea",
       ) as HTMLTextAreaElement | null;
 
-      // Find which block is at the top of the textarea and which has the cursor
       let topBlockIndex = 0;
       let cursorBlockIndex = 0;
       if (textarea) {
@@ -1917,25 +689,12 @@ export function Editor({
 
       sourceModeTransitionRef.current = { topBlockIndex, cursorBlockIndex };
 
-      // Parse and set content
-      const manager = editor.storage.markdown?.manager;
-      if (manager) {
-        try {
-          const parsed = manager.parse(sourceContent);
-          editor.commands.setContent(parsed);
-        } catch {
-          editor.commands.setContent(sourceContent);
-        }
-      } else {
-        editor.commands.setContent(sourceContent);
-      }
+      replaceContent(editor, sourceContent);
       setSourceMode(false);
     }
-  }, [editor, sourceMode, sourceContent, getMarkdown]);
+  }, [getEditor, sourceMode, sourceContent]);
 
-  // Restore focus and scroll position after source mode transitions.
-  // useLayoutEffect runs synchronously after React commits DOM changes,
-  // guaranteeing the new textarea / EditorContent is mounted.
+  // Restore scroll position after source mode transitions
   useLayoutEffect(() => {
     let rafId: number | undefined;
     const transition = sourceModeTransitionRef.current;
@@ -1947,15 +706,12 @@ export function Editor({
     const container = scrollContainerRef.current;
 
     if (sourceMode) {
-      // Just entered source mode — focus textarea and scroll to anchor block
       const textarea = container?.querySelector(
         "textarea",
       ) as HTMLTextAreaElement | null;
       if (!textarea) return () => {};
 
       const md = transition.md || "";
-
-      // Place cursor at the start of the same block in markdown
       const blockOffsets = getMarkdownBlockOffsets(md);
       const cursorPos =
         transition.cursorBlockIndex < blockOffsets.length
@@ -1971,56 +727,104 @@ export function Editor({
           parseFloat(getComputedStyle(textarea).lineHeight) || 20;
         textarea.scrollTop = linesBefore * lineHeight;
       }
-    } else if (editor) {
-      // Just exited source mode — focus editor and scroll to anchor block.
-      // Use rAF because EditorContent reattaches the ProseMirror view in
-      // its own useEffect, which hasn't run yet during useLayoutEffect.
-      rafId = requestAnimationFrame(() => {
-        if (!editor.view?.dom?.isConnected) return;
-        const doc = editor.state.doc;
-        editor.commands.focus(
-          blockIndexToPos(doc, transition.cursorBlockIndex),
-        );
-
-        // Scroll to anchor block
-        const el = scrollContainerRef.current;
-        if (el) {
+    } else {
+      const editor = getEditor();
+      if (editor) {
+        const view = editor.ctx.get(editorViewCtx);
+        rafId = requestAnimationFrame(() => {
+          if (!view?.dom?.isConnected) return;
+          const doc = view.state.doc;
+          const pos = blockIndexToPos(doc, transition.cursorBlockIndex);
           try {
-            el.scrollTop = 0;
-            const coords = editor.view.coordsAtPos(
-              blockIndexToPos(doc, transition.topBlockIndex),
+            view.focus();
+            const tr = view.state.tr.setSelection(
+              TextSelection.create(view.state.doc, pos, pos),
             );
-            const containerRect = el.getBoundingClientRect();
-            el.scrollTop = coords.top - containerRect.top;
+            view.dispatch(tr);
           } catch {
-            // coordsAtPos can fail if view isn't fully rendered
+            // ignore
           }
-        }
-      });
+
+          const el = scrollContainerRef.current;
+          if (el) {
+            try {
+              el.scrollTop = 0;
+              const coords = view.coordsAtPos(
+                blockIndexToPos(doc, transition.topBlockIndex),
+              );
+              const containerRect = el.getBoundingClientRect();
+              el.scrollTop = coords.top - containerRect.top;
+            } catch {
+              // coordsAtPos can fail
+            }
+          }
+        });
+      }
     }
 
     return () => {
       if (rafId) cancelAnimationFrame(rafId);
     };
-  }, [sourceMode, editor]);
+  }, [sourceMode, getEditor]);
 
-  // Listen for toggle-source-mode custom event (from App.tsx shortcut / command palette)
+  // Listen for toggle-source-mode custom event
   useEffect(() => {
     const handler = () => toggleSourceMode();
     window.addEventListener("toggle-source-mode", handler);
     return () => window.removeEventListener("toggle-source-mode", handler);
   }, [toggleSourceMode]);
 
-  // Auto-save in source mode with debounce
-  const handleSourceChange = useCallback(
-    (value: string) => {
-      setSourceContent(value);
-    },
-    [],
-  );
+  // Auto-save in source mode
+  const handleSourceChange = useCallback((value: string) => {
+    setSourceContent(value);
+  }, []);
+
+  // Keyboard shortcut for Cmd+Shift+C to open copy menu
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "c") {
+        e.preventDefault();
+        setCopyMenuOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Handle clicks on external links
+  useEffect(() => {
+    const editor = getEditor();
+    if (!editor) return;
+    const view = editor.ctx.get(editorViewCtx);
+
+    const handleEditorClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      const link = target.closest("a");
+      if (link) {
+        e.preventDefault();
+        if ((e.metaKey || e.ctrlKey) && link.href) {
+          const rawHref = link.getAttribute("href") ?? "";
+          if (
+            rawHref.startsWith("http:") ||
+            rawHref.startsWith("https:") ||
+            rawHref.startsWith("mailto:")
+          ) {
+            openUrl(rawHref).catch((error) =>
+              console.error("Failed to open link:", error),
+            );
+          }
+        }
+      }
+    };
+
+    const editorElement = view.dom;
+    editorElement.addEventListener("click", handleEditorClick);
+    return () => {
+      editorElement.removeEventListener("click", handleEditorClick);
+    };
+  }, [loading, getEditor]);
 
   if (!currentNote) {
-    // Preview mode: show loading state (content not yet loaded)
     if (previewMode) {
       return (
         <div className="flex-1 flex flex-col bg-bg">
@@ -2035,7 +839,6 @@ export function Editor({
       );
     }
 
-    // A note is selected but not yet loaded — show loading spinner to avoid empty state flash
     if (notesCtx?.selectedNoteId) {
       return (
         <div className="flex-1 flex flex-col bg-bg">
@@ -2050,10 +853,8 @@ export function Editor({
       );
     }
 
-    // Folder mode: show empty state with "New Note" button
     return (
       <div className="flex-1 flex flex-col bg-bg">
-        {/* Drag region */}
         <div
           className="h-10 shrink-0 flex items-end px-4 pb-1"
           data-tauri-drag-region
@@ -2076,8 +877,8 @@ export function Editor({
                 maskPosition: "center",
               }}
             />
-            <h1 className="text-2xl text-text font-serif mb-1 tracking-[-0.01em] ">
-              What's on your mind?
+            <h1 className="text-2xl text-text font-serif mb-1 tracking-[-0.01em]">
+              What&apos;s on your mind?
             </h1>
             <p className="text-sm">
               Pick up where you left off, or start something new
@@ -2104,7 +905,7 @@ export function Editor({
 
   return (
     <div className="flex-1 flex flex-col bg-bg overflow-hidden">
-      {/* Drag region with sidebar toggle, date and save status */}
+      {/* Header bar */}
       <div
         className={cn(
           "h-11 shrink-0 flex items-center justify-between px-3",
@@ -2173,7 +974,6 @@ export function Editor({
                       await pinNote(currentNote.id);
                       toast.success("Note pinned");
                     }
-                    // Reload settings to update isPinned state
                     const updatedSettings = await notesService.getSettings();
                     setSettings(updatedSettings);
                   } catch (error) {
@@ -2219,7 +1019,10 @@ export function Editor({
               </IconButton>
             </Tooltip>
           )}
-          <DropdownMenu.Root open={copyMenuOpen} onOpenChange={setCopyMenuOpen}>
+          <DropdownMenu.Root
+            open={copyMenuOpen}
+            onOpenChange={setCopyMenuOpen}
+          >
             <Tooltip
               content={`Export (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}C)`}
             >
@@ -2234,12 +1037,8 @@ export function Editor({
                 className="min-w-35 bg-bg border border-border rounded-md shadow-lg py-1 z-50"
                 sideOffset={5}
                 align="end"
-                onCloseAutoFocus={(e) => {
-                  // Prevent focus returning to trigger button
-                  e.preventDefault();
-                }}
+                onCloseAutoFocus={(e) => e.preventDefault()}
                 onKeyDown={(e) => {
-                  // Stop arrow keys from bubbling to note list navigation
                   if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                     e.stopPropagation();
                   }
@@ -2302,21 +1101,11 @@ export function Editor({
         </div>
       </div>
 
-      {/* Format Bar – transition only after initial mount to avoid height animation on note load */}
+      {/* Editor content area */}
       <div
-        data-format-bar
-        className={`${focusMode || sourceMode ? "opacity-0 max-h-0 overflow-hidden pointer-events-none" : "opacity-100 max-h-20"} ${hasTransitioned ? `transition-all duration-400 ${needsSidebarDelay ? "delay-200" : ""}` : ""}`}
+        data-editor-content-area
+        className="flex-1 relative overflow-hidden"
       >
-        <FormatBar
-          editor={editor}
-          onAddLink={handleAddLink}
-          onAddBlockMath={handleAddBlockMath}
-          onAddImage={handleAddImage}
-        />
-      </div>
-
-      {/* Editor content area with resize handles overlay */}
-      <div data-editor-content-area className="flex-1 relative overflow-hidden">
         {!focusMode && !sourceMode && (
           <EditorWidthHandles containerRef={scrollContainerRef} />
         )}
@@ -2326,9 +1115,38 @@ export function Editor({
           className="absolute inset-0 overflow-y-auto overflow-x-hidden"
           dir={textDirection}
         >
-          {sourceMode ? (
-            /* Markdown source textarea */
-            <div className="h-full">
+          {searchOpen && !sourceMode && (
+            <div className="sticky top-2 z-10 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-none pr-2 flex justify-end">
+              <div className="pointer-events-auto">
+                <SearchToolbar
+                  inputRef={searchInputRef}
+                  query={searchQuery}
+                  onChange={setSearchQuery}
+                  onNext={() => {}}
+                  onPrevious={() => {}}
+                  onClose={() => {
+                    setSearchOpen(false);
+                    setSearchQuery("");
+                    const editor = getEditor();
+                    if (editor) {
+                      const view = editor.ctx.get(editorViewCtx);
+                      view.focus();
+                    }
+                  }}
+                  currentMatch={0}
+                  totalMatches={0}
+                />
+              </div>
+            </div>
+          )}
+          <div
+            className="h-full"
+            style={sourceMode ? { display: "none" } : undefined}
+          >
+            <Milkdown />
+          </div>
+          {sourceMode && (
+            <div className="h-full absolute inset-0">
               <textarea
                 value={sourceContent}
                 onChange={(e) => handleSourceChange(e.target.value)}
@@ -2346,215 +1164,6 @@ export function Editor({
                 spellCheck={false}
               />
             </div>
-          ) : (
-            <>
-              {searchOpen && (
-                <div className="sticky top-2 z-10 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-none pr-2 flex justify-end">
-                  <div className="pointer-events-auto">
-                    <SearchToolbar
-                      inputRef={searchInputRef}
-                      query={searchQuery}
-                      onChange={handleSearchChange}
-                      onNext={goToNextMatch}
-                      onPrevious={goToPreviousMatch}
-                      onClose={() => {
-                        setSearchOpen(false);
-                        setSearchQuery("");
-                        setSearchMatches([]);
-                        setCurrentMatchIndex(0);
-                        // Clear decorations and refocus editor
-                        if (editor) {
-                          updateSearchDecorations([], 0, editor);
-                          editor.commands.focus();
-                        }
-                      }}
-                      currentMatch={
-                        searchMatches.length === 0 ? 0 : currentMatchIndex + 1
-                      }
-                      totalMatches={searchMatches.length}
-                    />
-                  </div>
-                </div>
-              )}
-              <div
-                className="h-full"
-                onContextMenu={async (e) => {
-                  if (!editor) return;
-
-                  // Get the position at the click coordinates
-                  const clickPos = editor.view.posAtCoords({
-                    left: e.clientX,
-                    top: e.clientY,
-                  });
-
-                  if (!clickPos) return;
-
-                  // Set the selection to the clicked position
-                  editor.chain().focus().setTextSelection(clickPos.pos).run();
-
-                  // Check if we're in a table after updating selection
-                  if (!editor.isActive("table")) return;
-
-                  e.preventDefault();
-
-                  try {
-                    // Work with the updated selection
-                    const { state } = editor;
-                    const { selection } = state;
-                    const { $anchor } = selection;
-
-                    // Find the table cell/header node
-                    let cellDepth = $anchor.depth;
-                    while (
-                      cellDepth > 0 &&
-                      state.doc.resolve($anchor.pos).node(cellDepth).type
-                        .name !== "tableCell" &&
-                      state.doc.resolve($anchor.pos).node(cellDepth).type
-                        .name !== "tableHeader"
-                    ) {
-                      cellDepth--;
-                    }
-
-                    // Guard: if we didn't find a table cell, bail out
-                    if (cellDepth <= 0) return;
-
-                    const resolvedNode = state.doc
-                      .resolve($anchor.pos)
-                      .node(cellDepth);
-                    if (
-                      resolvedNode.type.name !== "tableCell" &&
-                      resolvedNode.type.name !== "tableHeader"
-                    ) {
-                      return;
-                    }
-
-                    // Get the cell position
-                    const cellPos = $anchor.before(cellDepth);
-
-                    // Check if we're in the first column (index 0 in parent row)
-                    const rowNode = state.doc
-                      .resolve(cellPos)
-                      .node(cellDepth - 1);
-                    let cellIndex = 0;
-                    rowNode.forEach((_node, offset) => {
-                      if (
-                        offset <
-                        cellPos - $anchor.before(cellDepth - 1) - 1
-                      ) {
-                        cellIndex++;
-                      }
-                    });
-                    const isFirstColumn = cellIndex === 0;
-
-                    // Check if we're in the first row (index 0 in parent table)
-                    const tableNode = state.doc
-                      .resolve(cellPos)
-                      .node(cellDepth - 2);
-                    let rowIndex = 0;
-                    tableNode.forEach((_node, offset) => {
-                      if (
-                        offset <
-                        $anchor.before(cellDepth - 1) -
-                          $anchor.before(cellDepth - 2) -
-                          1
-                      ) {
-                        rowIndex++;
-                      }
-                    });
-                    const isFirstRow = rowIndex === 0;
-
-                    const menuItems = [];
-
-                    // Only show "Add Column Before" if not in first column
-                    if (!isFirstColumn) {
-                      menuItems.push(
-                        await MenuItem.new({
-                          text: "Add Column Before",
-                          action: () =>
-                            editor.chain().focus().addColumnBefore().run(),
-                        }),
-                      );
-                    }
-                    menuItems.push(
-                      await MenuItem.new({
-                        text: "Add Column After",
-                        action: () =>
-                          editor.chain().focus().addColumnAfter().run(),
-                      }),
-                    );
-                    menuItems.push(
-                      await MenuItem.new({
-                        text: "Delete Column",
-                        action: () =>
-                          editor.chain().focus().deleteColumn().run(),
-                      }),
-                    );
-                    menuItems.push(
-                      await PredefinedMenuItem.new({ item: "Separator" }),
-                    );
-
-                    // Only show "Add Row Above" if not in first row
-                    if (!isFirstRow) {
-                      menuItems.push(
-                        await MenuItem.new({
-                          text: "Add Row Above",
-                          action: () =>
-                            editor.chain().focus().addRowBefore().run(),
-                        }),
-                      );
-                    }
-                    menuItems.push(
-                      await MenuItem.new({
-                        text: "Add Row Below",
-                        action: () =>
-                          editor.chain().focus().addRowAfter().run(),
-                      }),
-                    );
-                    menuItems.push(
-                      await MenuItem.new({
-                        text: "Delete Row",
-                        action: () => editor.chain().focus().deleteRow().run(),
-                      }),
-                    );
-                    menuItems.push(
-                      await PredefinedMenuItem.new({ item: "Separator" }),
-                    );
-                    menuItems.push(
-                      await MenuItem.new({
-                        text: "Toggle Header Row",
-                        action: () =>
-                          editor.chain().focus().toggleHeaderRow().run(),
-                      }),
-                    );
-                    menuItems.push(
-                      await MenuItem.new({
-                        text: "Toggle Header Column",
-                        action: () =>
-                          editor.chain().focus().toggleHeaderColumn().run(),
-                      }),
-                    );
-                    menuItems.push(
-                      await PredefinedMenuItem.new({ item: "Separator" }),
-                    );
-                    menuItems.push(
-                      await MenuItem.new({
-                        text: "Delete Table",
-                        action: () =>
-                          editor.chain().focus().deleteTable().run(),
-                      }),
-                    );
-
-                    const menu = await Menu.new({ items: menuItems });
-
-                    await menu.popup();
-                  } catch (err) {
-                    console.error("Table context menu error:", err);
-                  }
-                }}
-              >
-                <EditorContent editor={editor} className="h-full text-text" />
-              </div>
-            </>
           )}
         </div>
       </div>

@@ -14,7 +14,8 @@ import { useTheme } from "../../context/ThemeContext";
 import * as notesService from "../../services/notes";
 import { downloadPdf, downloadMarkdown } from "../../services/pdf";
 import type { Settings } from "../../types/note";
-import type { Editor } from "@tiptap/react";
+import type { Crepe } from "@milkdown/crepe";
+import { editorViewCtx } from "@milkdown/kit/core";
 import {
   CommandItem,
   AlertDialog,
@@ -60,7 +61,7 @@ interface CommandPaletteProps {
   onOpenShortcuts?: () => void;
   focusMode?: boolean;
   onToggleFocusMode?: () => void;
-  editorRef?: React.RefObject<Editor | null>;
+  editorRef?: React.RefObject<Crepe | null>;
 }
 
 export function CommandPalette({
@@ -206,7 +207,7 @@ export function CommandPalette({
             }
           },
         },
-        {
+          {
           id: "copy-html",
           label: "Copy HTML",
           icon: <CopyIcon className="w-4.5 h-4.5 stroke-[1.5]" />,
@@ -216,10 +217,24 @@ export function CommandPalette({
                 toast.error("Editor not available");
                 return;
               }
-              const html = editorRef.current.getHTML();
-              await invoke("copy_to_clipboard", { text: html });
-              toast.success("Copied as HTML");
-              onClose();
+              const editor = editorRef.current.editor;
+              if (!editor) {
+                toast.error("Editor not ready");
+                return;
+              }
+              editor.action((ctx) => {
+                const view = ctx.get(editorViewCtx);
+                const div = document.createElement("div");
+                div.innerHTML = view.dom.innerHTML;
+                const html = div.innerHTML;
+                invoke("copy_to_clipboard", { text: html }).then(() => {
+                  toast.success("Copied as HTML");
+                  onClose();
+                }).catch((error: unknown) => {
+                  console.error("Failed to copy HTML:", error);
+                  toast.error("Failed to copy");
+                });
+              });
             } catch (error) {
               console.error("Failed to copy HTML:", error);
               toast.error("Failed to copy");
@@ -232,13 +247,11 @@ export function CommandPalette({
           icon: <DownloadIcon className="w-4.5 h-4.5 stroke-[1.5]" />,
           action: async () => {
             try {
-              if (!editorRef?.current || !currentNote) {
+              if (!currentNote) {
                 toast.error("Editor not available");
                 return;
               }
-              await downloadPdf(editorRef.current, currentNote.title);
-              // Note: window.print() opens the print dialog but doesn't wait for user action
-              // No success toast needed - the print dialog provides its own feedback
+              await downloadPdf(currentNote.title);
               onClose();
             } catch (error) {
               console.error("Failed to open print dialog:", error);
@@ -256,16 +269,14 @@ export function CommandPalette({
                 toast.error("No note selected");
                 return;
               }
-              // Use live editor content with nbsp cleanup, fall back to saved content
+              // Use live editor content, fall back to saved content
               let markdown = currentNote.content;
-              const editorInstance = editorRef?.current;
-              if (editorInstance) {
-                const manager = editorInstance.storage.markdown?.manager;
-                if (manager) {
-                  markdown = manager.serialize(editorInstance.getJSON());
-                  markdown = markdown.replace(/&nbsp;|&#160;/g, " ");
-                } else {
-                  markdown = editorInstance.getText();
+              const crepeInstance = editorRef?.current;
+              if (crepeInstance) {
+                try {
+                  markdown = crepeInstance.getMarkdown() || currentNote.content;
+                } catch {
+                  // fallback to saved content
                 }
               }
               const saved = await downloadMarkdown(markdown, currentNote.title);
