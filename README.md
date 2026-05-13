@@ -16,7 +16,6 @@ A super minimal, offline-first markdown note-taking app for macOS, Windows, and 
 - **Syntax highlighting** - 20 languages with GitHub-inspired color scheme
 - **Mermaid diagrams** - Render flowcharts, sequence diagrams, and more in fenced code blocks
 - **KaTeX math** - Render block `$$...$$` math equations
-- **Wikilinks** - Type `[[` to link between notes with autocomplete
 - **Slash commands** - Type `/` to quickly insert headings, lists, code blocks, diagrams, and more
 - **Focus mode** - Distraction-free writing with animated sidebar/toolbar fade (`Cmd+Shift+Enter`)
 - **Folders** - Opt-in collapsible folder tree with drag-and-drop to organize notes

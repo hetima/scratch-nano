@@ -175,15 +175,6 @@ const SLASH_COMMANDS: SlashCommandItem[] = [
         .run();
     },
   },
-  {
-    title: "Wikilink",
-    description: "Link to another note",
-    icon: <BracketsIcon />,
-    aliases: ["link", "note", "wikilink", "[["],
-    command: (editor) => {
-      editor.chain().focus().insertContent("[[").run();
-    },
-  },
 ];
 
 const slashCommandPluginKey = new PluginKey("slashCommand");

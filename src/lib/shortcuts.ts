@@ -78,7 +78,6 @@ export const shortcutCategories: ShortcutCategory[] = [
       { keys: ["```"], description: "Code block" },
       { keys: ["---"], description: "Horizontal rule" },
       { keys: ["[text](url)"], description: "Link" },
-      { keys: ["[[Note]]"], description: "Wikilink" },
       { keys: ["![alt](url)"], description: "Image" },
       { keys: ["| | |"], description: "Table" },
       { keys: ["$$...$$"], description: "Block math" },
