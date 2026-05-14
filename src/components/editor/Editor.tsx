@@ -15,6 +15,8 @@ import { TextSelection } from "@milkdown/kit/prose/state";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/nord.css";
 
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import type { UnlistenFn } from '@tauri-apps/api/event'; 
 import { Menu, MenuItem, PredefinedMenuItem } from "@tauri-apps/api/menu";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -373,6 +375,28 @@ function MilkdownEditorInner({
       }
     }, 500);
   }, [saveImmediately, currentNote?.id]);
+
+  // Handle window close to flush pending saves
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    let unlisten: UnlistenFn | undefined;
+    
+    appWindow.onCloseRequested(async (event) => {
+      event.preventDefault();
+      try {
+        await flushPendingSave();
+      } catch (e) {
+        console.error('Save failed before closing:', e);
+      }
+      unlisten?.();
+      await appWindow.destroy();
+    }).then((fn) => { unlisten = fn; })
+      .catch((e) => console.error("Failed to setup close listener:", e));
+    
+    return () => {
+      unlisten?.();
+    };
+  }, []);
 
   // Track which note is loaded
   const loadedNoteIdRef = useRef<string | null>(null);
