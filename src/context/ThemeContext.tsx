@@ -21,13 +21,19 @@ import type {
 type ThemeMode = "light" | "dark" | "system";
 
 // Font family CSS values
-const fontFamilyMap: Record<FontFamily, string> = {
-  "system-sans":
-    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-  serif: 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif',
-  monospace:
-    "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, 'Courier New', monospace",
-};
+function getFontFamilyValue(fontFamily: string): string {
+  switch (fontFamily) {
+    case "system-sans":
+      return '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+    case "serif":
+      return 'ui-serif, Georgia, Cambria, "Times New Roman", Times, serif';
+    case "monospace":
+      return "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, 'Courier New', monospace";
+    default:
+      // Use system font name directly
+      return fontFamily;
+  }
+}
 
 // Editor width CSS values for presets
 const editorWidthMap: Record<Exclude<EditorWidth, "custom">, string> = {
@@ -136,7 +142,7 @@ interface ThemeProviderProps {
 // Apply editor font CSS variables (with computed values)
 function applyFontCSSVariables(fonts: Required<EditorFontSettings>) {
   const root = document.documentElement;
-  const fontFamily = fontFamilyMap[fonts.baseFontFamily];
+  const fontFamily = getFontFamilyValue(fonts.baseFontFamily);
   const baseSize = fonts.baseFontSize;
   const boldWeight = fonts.boldWeight;
   const lineHeight = fonts.lineHeight;

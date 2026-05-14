@@ -16,6 +16,7 @@ export { Button } from "./Button";
 export { CodeCopyButton } from "./CodeCopyButton";
 export { Input } from "./Input";
 export { Select } from "./Select";
+export { Combobox } from "./Combobox";
 export { Toaster } from "./Toaster";
 export {
   AlertDialog,

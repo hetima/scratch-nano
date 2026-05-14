@@ -17,6 +17,7 @@
     "dialog:allow-open",
     "core:menu:default",
     "clipboard-manager:allow-write-text",
-    "updater:default"
+    "updater:default",
+    "system-fonts:default"
   ]
 }

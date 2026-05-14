@@ -68,6 +68,7 @@
       "endpoints": [
         "https://github.com/hetima/scratch-nano/releases/latest/download/latest.json"
       ]
-    }
+    },
+    "system-fonts": {}
   }
 }

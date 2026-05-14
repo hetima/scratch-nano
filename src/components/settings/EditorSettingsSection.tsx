@@ -1,5 +1,6 @@
 import { useTheme, defaultThemeColors } from "../../context/ThemeContext";
 import { Button, CodeCopyButton, IconButton, Input, Select } from "../ui";
+import { Combobox } from "../ui/Combobox";
 import { ColorPicker } from "../ui/ColorPicker";
 import type {
   FontFamily,
@@ -9,6 +10,8 @@ import type {
 } from "../../types/note";
 import { ChevronRightIcon, EyeIcon, MinusIcon, PlusIcon } from "../icons";
 import { cn } from "../../lib/utils";
+import { getSystemFonts } from "tauri-plugin-system-fonts-api";
+import { useState, useEffect, useMemo } from "react";
 
 // Human-readable labels for theme color keys, grouped logically
 const colorLabels: { key: ThemeColorKey; label: string; group: string }[] = [
@@ -41,13 +44,6 @@ const editorWidthOptions: { value: EditorWidth; label: string }[] = [
   { value: "custom", label: "Custom" },
 ];
 
-// Font family options
-const fontFamilyOptions: { value: FontFamily; label: string }[] = [
-  { value: "system-sans", label: "Sans" },
-  { value: "serif", label: "Serif" },
-  { value: "monospace", label: "Mono" },
-];
-
 // Bold weight options (medium excluded for monospace)
 const boldWeightOptions = [
   { value: 500, label: "Medium", excludeForMonospace: true },
@@ -57,6 +53,19 @@ const boldWeightOptions = [
 ];
 
 export function AppearanceSettingsSection() {
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+
+  useEffect(() => {
+    getSystemFonts()
+      .then((fonts) => {
+        const uniqueNames = [...new Set(fonts.map((f) => f.name))];
+        setSystemFonts(uniqueNames);
+      })
+      .catch((err) => {
+        console.error("Failed to load system fonts:", err);
+      });
+  }, []);
+
   const {
     theme,
     resolvedTheme,
@@ -78,6 +87,24 @@ export function AppearanceSettingsSection() {
     resetCustomColor,
     resetAllCustomColors,
   } = useTheme();
+
+  // Build font options for combobox
+  const fontOptions = useMemo(() => {
+    const builtin = [
+      { value: "system-sans", label: "System Sans" },
+      { value: "serif", label: "Serif" },
+      { value: "monospace", label: "Monospace" },
+    ];
+    const current = editorFontSettings.baseFontFamily;
+    const isBuiltin =
+      current === "system-sans" || current === "serif" || current === "monospace";
+    const system = systemFonts.map((name) => ({ value: name, label: name, group: "System Fonts" }));
+    // Ensure current custom font is in the list
+    if (!isBuiltin && !systemFonts.includes(current)) {
+      system.unshift({ value: current, label: current, group: "System Fonts" });
+    }
+    return [...builtin, ...system];
+  }, [systemFonts, editorFontSettings.baseFontFamily]);
 
   // Validated numeric change handler
   const handleNumericChange = (
@@ -194,19 +221,13 @@ export function AppearanceSettingsSection() {
           {/* Font Family */}
           <div className="flex items-center justify-between">
             <label className="text-sm text-text font-medium">Font</label>
-            <Select
+            <Combobox
               value={editorFontSettings.baseFontFamily}
-              onChange={(e) =>
-                handleFontFamilyChange(e.target.value as FontFamily)
-              }
-              className="w-40"
-            >
-              {fontFamilyOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
+              onChange={(v) => handleFontFamilyChange(v as FontFamily)}
+              options={fontOptions}
+              className="w-60"
+              placeholder="Search fonts..."
+            />
           </div>
 
           {/* Base Font Size */}
@@ -234,7 +255,7 @@ export function AppearanceSettingsSection() {
               onChange={(e) =>
                 setEditorFontSetting("boldWeight", Number(e.target.value))
               }
-              className="w-40"
+              className="w-60"
             >
               {availableWeightOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -272,7 +293,7 @@ export function AppearanceSettingsSection() {
               onChange={(e) =>
                 setTextDirection(e.target.value as TextDirection)
               }
-              className="w-40"
+              className="w-60"
             >
               {textDirectionOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -288,7 +309,7 @@ export function AppearanceSettingsSection() {
             <Select
               value={editorWidth}
               onChange={(e) => setEditorWidth(e.target.value as EditorWidth)}
-              className="w-40"
+              className="w-60"
             >
               {editorWidthOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>
@@ -366,12 +387,19 @@ export function AppearanceSettingsSection() {
               className="prose prose-lg dark:prose-invert max-w-xl mx-auto"
               dir={textDirection}
               style={{
-                fontFamily:
-                  editorFontSettings.baseFontFamily === "system-sans"
-                    ? "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-                    : editorFontSettings.baseFontFamily === "serif"
-                      ? "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif"
-                      : "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace",
+                fontFamily: (() => {
+                  const family = editorFontSettings.baseFontFamily;
+                  if (family === "system-sans") {
+                    return "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+                  } else if (family === "serif") {
+                    return "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif";
+                  } else if (family === "monospace") {
+                    return "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace";
+                  } else {
+                    // Use system font name directly
+                    return family;
+                  }
+                })(),
                 fontSize: `${editorFontSettings.baseFontSize}px`,
               }}
             >

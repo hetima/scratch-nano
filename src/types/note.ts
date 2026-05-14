@@ -17,7 +17,7 @@ export interface ThemeSettings {
   mode: "light" | "dark" | "system";
 }
 
-export type FontFamily = "system-sans" | "serif" | "monospace";
+export type FontFamily = string; // Any system font family name
 export type TextDirection = "auto" | "ltr" | "rtl";
 export type EditorWidth = "narrow" | "normal" | "wide" | "full" | "custom";
 
