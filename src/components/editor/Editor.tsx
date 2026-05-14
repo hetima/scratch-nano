@@ -248,11 +248,9 @@ function MilkdownEditorInner({
   const [searchQuery, setSearchQuery] = useState("");
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const saveTimeoutRef = useRef<number | null>(null);
   const isLoadingRef = useRef(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const currentNoteIdRef = useRef<string | null>(null);
-  const needsSaveRef = useRef(false);
   const notesCtxRef = useRef(notesCtx);
   notesCtxRef.current = notesCtx;
 
@@ -272,10 +270,10 @@ function MilkdownEditorInner({
         [Crepe.Feature.Cursor]: true,
         [Crepe.Feature.ListItem]: true,
         [Crepe.Feature.ImageBlock]: true,
-        [Crepe.Feature.Toolbar]: true,
         [Crepe.Feature.CodeMirror]: true,
         [Crepe.Feature.Table]: true,
         [Crepe.Feature.TopBar]: true,
+        [Crepe.Feature.Toolbar]: false,
         [Crepe.Feature.Placeholder]: false,
         [Crepe.Feature.BlockEdit]: false,
         [Crepe.Feature.LinkTooltip]: false,
@@ -288,16 +286,6 @@ function MilkdownEditorInner({
     });
 
     crepeRef.current = crepe;
-
-    // Listen for markdown changes for auto-save
-    crepe.on((listener) => {
-      listener.markdownUpdated((_ctx, markdown, prevMarkdown) => {
-        if (markdown !== prevMarkdown && !isLoadingRef.current) {
-          scheduleSave();
-        }
-      });
-    });
-
     return crepe;
   });
 
@@ -326,8 +314,10 @@ function MilkdownEditorInner({
     settings?.pinnedNoteIds?.includes(currentNote?.id || "") || false;
 
   // Immediate save function
-  const saveImmediately = useCallback(
-    async (noteId: string, content: string) => {
+  const saveImmediately = useCallback(async () => {
+      const noteId = loadedNoteIdRef.current;
+      if (!noteId || !crepeRef.current) return;
+      const content = crepeRef.current.getMarkdown();
       if (lastSaveRef.current?.noteId === noteId && lastSaveRef.current.content === content) return;
       setIsSaving(true);
       try {
@@ -340,43 +330,7 @@ function MilkdownEditorInner({
     [saveNote],
   );
 
-  // Flush any pending save
-  const flushPendingSave = useCallback(async () => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-      saveTimeoutRef.current = null;
-    }
-    needsSaveRef.current = false;
-    if (!editorRef.current || !loadedNoteIdRef.current) return;
-    const noteId = loadedNoteIdRef.current;
-    const markdown = crepeRef.current?.getMarkdown() ?? "";
-    // Skip save if content hasn't changed since last save
-    await saveImmediately(noteId, markdown);
-  }, [saveImmediately]);
-
-  // Schedule a debounced save
-  const scheduleSave = useCallback(() => {
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current);
-    }
-    const savingNoteId = currentNote?.id;
-    if (!savingNoteId) return;
-
-    needsSaveRef.current = true;
-
-    saveTimeoutRef.current = window.setTimeout(async () => {
-      if (currentNoteIdRef.current !== savingNoteId || !needsSaveRef.current) {
-        return;
-      }
-      if (crepeRef.current) {
-        needsSaveRef.current = false;
-        const markdown = crepeRef.current.getMarkdown();
-        await saveImmediately(savingNoteId, markdown);
-      }
-    }, 500);
-  }, [saveImmediately, currentNote?.id]);
-
-  // Handle window close to flush pending saves
+  // Handle window close to save pending changes
   useEffect(() => {
     const appWindow = getCurrentWindow();
     let unlisten: UnlistenFn | undefined;
@@ -384,7 +338,9 @@ function MilkdownEditorInner({
     appWindow.onCloseRequested(async (event) => {
       event.preventDefault();
       try {
-        await flushPendingSave();
+        if (loadedNoteIdRef.current) {
+          await saveImmediately();
+        }
       } catch (e) {
         console.error('Save failed before closing:', e);
       }
@@ -396,7 +352,7 @@ function MilkdownEditorInner({
     return () => {
       unlisten?.();
     };
-  }, []);
+  }, [saveImmediately]);
 
   // Track which note is loaded
   const loadedNoteIdRef = useRef<string | null>(null);
@@ -411,34 +367,6 @@ function MilkdownEditorInner({
       searchInputRef.current?.focus();
     });
   }, []);
-
-  // Cmd+F to open search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        !e.shiftKey &&
-        e.key.toLowerCase() === "f"
-      ) {
-        if (!currentNote || loading) return;
-        const target = e.target as HTMLElement;
-        const tagName = target.tagName.toLowerCase();
-        if (
-          (tagName === "input" || tagName === "textarea") &&
-          !target.closest(".milkdown")
-        ) {
-          return;
-        }
-        if (target.closest('[class*="sidebar"]')) {
-          return;
-        }
-        e.preventDefault();
-        openEditorSearch();
-      }
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [loading, currentNote, openEditorSearch]);
 
   // Clear search on note switch
   useEffect(() => {
@@ -466,22 +394,18 @@ function MilkdownEditorInner({
         loadedNoteIdRef.current = currentNote.id;
         loadedModifiedRef.current = currentNote.modified;
         lastSaveRef.current = null;
-        if (needsSaveRef.current) {
-          flushPendingSave();
+        // Save pending changes on rename
+        if (loadedNoteIdRef.current) {
+          saveImmediately();
         }
         return;
       }
     }
 
-    // Save current note immediately before switching (only if content changed)
-    if (!isSameNote && loadedNoteIdRef.current && crepeRef.current) {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
-      needsSaveRef.current = false;
-      const markdown = crepeRef.current.getMarkdown();
-      saveImmediately(loadedNoteIdRef.current, markdown);
+    // Save current note immediately before switching
+    if (!isSameNote && loadedNoteIdRef.current) {
+      console.log("Saved note %s before switching", loadedNoteIdRef.current);
+      saveImmediately();
     }
 
     // Reset source mode when switching notes
@@ -541,7 +465,6 @@ function MilkdownEditorInner({
     currentNote,
     loading,
     getEditor,
-    flushPendingSave,
     saveImmediately,
     reloadVersion,
     consumePendingNewNote,
@@ -555,18 +478,12 @@ function MilkdownEditorInner({
   // Cleanup on unmount — save immediately if there are unsaved changes
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-        saveTimeoutRef.current = null;
-      }
       if (loadedNoteIdRef.current && crepeRef.current) {
-        needsSaveRef.current = false;
-        const markdown = crepeRef.current.getMarkdown();
-        saveImmediately(loadedNoteIdRef.current, markdown);
+        saveImmediately();
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [saveImmediately]);
 
   // Copy handlers
   const handleCopyMarkdown = useCallback(async () => {
@@ -797,6 +714,68 @@ function MilkdownEditorInner({
     window.addEventListener("toggle-source-mode", handler);
     return () => window.removeEventListener("toggle-source-mode", handler);
   }, [toggleSourceMode]);
+
+  // Cmd+S to save, Cmd+U to toggle source mode, Cmd+F to open search
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Cmd+S / Ctrl+S to save
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "s"
+      ) {
+        if (!loadedNoteIdRef.current || !crepeRef.current) return;
+        e.preventDefault();
+        saveImmediately();
+        toast.success("Saved");
+        return;
+      }
+
+      // Cmd+U / Ctrl+U to toggle source mode
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "u"
+      ) {
+        if (!currentNote || loading) return;
+        const target = e.target as HTMLElement;
+        const tagName = target.tagName.toLowerCase();
+        if (tagName === "input") {
+          return;
+        }
+        if (target.closest('[class*="sidebar"]')) {
+          return;
+        }
+        e.preventDefault();
+        toggleSourceMode();
+        return;
+      }
+
+      // Cmd+F / Ctrl+F to open search
+      if (
+        (e.metaKey || e.ctrlKey) &&
+        !e.shiftKey &&
+        e.key.toLowerCase() === "f"
+      ) {
+        if (!currentNote || loading) return;
+        const target = e.target as HTMLElement;
+        const tagName = target.tagName.toLowerCase();
+        if (
+          (tagName === "input" || tagName === "textarea") &&
+          !target.closest(".milkdown")
+        ) {
+          return;
+        }
+        if (target.closest('[class*="sidebar"]')) {
+          return;
+        }
+        e.preventDefault();
+        openEditorSearch();
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [loading, currentNote, openEditorSearch, saveImmediately, toggleSourceMode]);
 
   // Auto-save in source mode
   const handleSourceChange = useCallback((value: string) => {

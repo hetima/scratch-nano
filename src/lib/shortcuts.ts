@@ -41,6 +41,8 @@ export const shortcutCategories: ShortcutCategory[] = [
   {
     title: "Editor",
     shortcuts: [
+      { keys: [mod, "S"], description: "Save file" },
+      { keys: [mod, "U"], description: "Source mode" },
       { keys: [mod, "B"], description: "Bold" },
       { keys: [mod, "I"], description: "Italic" },
       { keys: [mod, "K"], description: "Add / edit link" },
