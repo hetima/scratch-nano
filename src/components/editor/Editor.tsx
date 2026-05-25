@@ -701,32 +701,35 @@ export function Editor({
               }}
             />
           )}
-          {/* Source mode — CodeMirror editor */}
-          {sourceMode && (
-            <div className="absolute inset-0" dir={textDirection}>
-              <CodeMirrorEditor
-                content={liveContent ?? currentNote.content}
-                onSave={(newContent) => {
-                  if (saveNote) {
-                    saveNote(newContent, currentNote.id);
-                  }
-                  setIsDirty(false);
-                  // liveContent will sync when currentNote updates from context
-                }}
-                onChange={(newContent) => {
-                  setLiveContent(newContent);
-                  setIsDirty(true);
-                }}
-                fontFamily={getFontFamilyValue(fonts.editFontFamily)}
-                fontSize={fonts.editFontSize}
-                lineHeight={fonts.editLineHeight}
-                codeFontFamily={getFontFamilyValue(fonts.codeFontFamily)}
-                textDirection={textDirection}
-                isDark={isDark}
-                showLineNumbers={showLineNumbers}
-              />
-            </div>
-          )}
+          {/* Source mode — CodeMirror editor (always mounted, hidden when in preview mode) */}
+          <div
+            className="absolute inset-0"
+            dir={textDirection}
+            style={{ display: sourceMode ? undefined : "none" }}
+          >
+            <CodeMirrorEditor
+              content={liveContent ?? currentNote.content}
+              onSave={(newContent) => {
+                if (saveNote) {
+                  saveNote(newContent, currentNote.id);
+                }
+                setIsDirty(false);
+                // liveContent will sync when currentNote updates from context
+              }}
+              onChange={(newContent) => {
+                setLiveContent(newContent);
+                setIsDirty(true);
+              }}
+              fontFamily={getFontFamilyValue(fonts.editFontFamily)}
+              fontSize={fonts.editFontSize}
+              lineHeight={fonts.editLineHeight}
+              codeFontFamily={getFontFamilyValue(fonts.codeFontFamily)}
+              textDirection={textDirection}
+              isDark={isDark}
+              showLineNumbers={showLineNumbers}
+              isVisible={sourceMode}
+            />
+          </div>
         </div>
       </div>
     </div>

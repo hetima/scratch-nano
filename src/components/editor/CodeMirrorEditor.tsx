@@ -17,6 +17,7 @@ interface CodeMirrorEditorProps {
   textDirection: "ltr" | "rtl" | "auto";
   isDark: boolean;
   showLineNumbers?: boolean;
+  isVisible?: boolean;
 }
 
 function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, codeFontFamily: string, isDark: boolean) {
@@ -135,6 +136,7 @@ export function CodeMirrorEditor({
   textDirection,
   isDark,
   showLineNumbers = false,
+  isVisible = true,
 }: CodeMirrorEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -230,6 +232,13 @@ export function CodeMirrorEditor({
       ],
     });
   }, [fontFamily, fontSize, lineHeight, codeFontFamily, isDark]);
+
+  // Re-measure layout when becoming visible (after display:none → visible)
+  useEffect(() => {
+    if (isVisible) {
+      viewRef.current?.requestMeasure();
+    }
+  }, [isVisible]);
 
   // Update line numbers when setting changes
   useEffect(() => {
