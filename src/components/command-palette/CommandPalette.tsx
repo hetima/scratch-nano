@@ -8,14 +8,13 @@ import {
   type ReactNode,
 } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { Marked } from "marked";
 import { toast } from "sonner";
 import { useNotes } from "../../context/NotesContext";
 import { useTheme } from "../../context/ThemeContext";
 import * as notesService from "../../services/notes";
 import { downloadPdf, downloadMarkdown } from "../../services/pdf";
 import type { Settings } from "../../types/note";
-import type { Crepe } from "@milkdown/crepe";
-import { editorViewCtx } from "@milkdown/kit/core";
 import {
   CommandItem,
   AlertDialog,
@@ -61,7 +60,6 @@ interface CommandPaletteProps {
   onOpenShortcuts?: () => void;
   focusMode?: boolean;
   onToggleFocusMode?: () => void;
-  editorRef?: React.RefObject<Crepe | null>;
 }
 
 export function CommandPalette({
@@ -71,7 +69,6 @@ export function CommandPalette({
   onOpenShortcuts,
   focusMode,
   onToggleFocusMode,
-  editorRef,
 }: CommandPaletteProps) {
   const {
     notes,
@@ -213,28 +210,11 @@ export function CommandPalette({
           icon: <CopyIcon className="w-4.5 h-4.5 stroke-[1.5]" />,
           action: async () => {
             try {
-              if (!editorRef?.current) {
-                toast.error("Editor not available");
-                return;
-              }
-              const editor = editorRef.current.editor;
-              if (!editor) {
-                toast.error("Editor not ready");
-                return;
-              }
-              editor.action((ctx) => {
-                const view = ctx.get(editorViewCtx);
-                const div = document.createElement("div");
-                div.innerHTML = view.dom.innerHTML;
-                const html = div.innerHTML;
-                invoke("copy_to_clipboard", { text: html }).then(() => {
-                  toast.success("Copied as HTML");
-                  onClose();
-                }).catch((error: unknown) => {
-                  console.error("Failed to copy HTML:", error);
-                  toast.error("Failed to copy");
-                });
-              });
+              const marked = new Marked({ gfm: true, breaks: true });
+              const html = await marked.parse(currentNote.content);
+              await invoke("copy_to_clipboard", { text: html as string });
+              toast.success("Copied as HTML");
+              onClose();
             } catch (error) {
               console.error("Failed to copy HTML:", error);
               toast.error("Failed to copy");
@@ -269,17 +249,7 @@ export function CommandPalette({
                 toast.error("No note selected");
                 return;
               }
-              // Use live editor content, fall back to saved content
-              let markdown = currentNote.content;
-              const crepeInstance = editorRef?.current;
-              if (crepeInstance) {
-                try {
-                  markdown = crepeInstance.getMarkdown() || currentNote.content;
-                } catch {
-                  // fallback to saved content
-                }
-              }
-              const saved = await downloadMarkdown(markdown, currentNote.title);
+              const saved = await downloadMarkdown(currentNote.content, currentNote.title);
               if (saved) {
                 toast.success("Markdown saved successfully");
                 onClose();

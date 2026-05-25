@@ -173,7 +173,7 @@ export function Combobox({
             "focus-visible:outline-none focus-visible:border-accent",
             "disabled:cursor-not-allowed disabled:opacity-50",
             "pr-8",
-            inputProps.className,
+            (inputProps as Record<string, unknown>).className as string | undefined,
           )}
         />
         <ChevronDownIcon

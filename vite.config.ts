@@ -45,13 +45,6 @@ export default defineConfig(async () => ({
       output: {
         // Manual chunk splitting for better caching
         manualChunks: {
-          // Milkdown editor
-          "milkdown": [
-            "@milkdown/crepe",
-            "@milkdown/react",
-            "@milkdown/kit",
-          ],
-          // Syntax highlighting (CodeMirror bundled with Milkdown)
           // React core
           "react-vendor": ["react", "react-dom"],
           // Tauri APIs
@@ -75,9 +68,7 @@ export default defineConfig(async () => ({
     include: [
       "react",
       "react-dom",
-      "@milkdown/crepe",
-      "@milkdown/react",
-      "@milkdown/kit",
+      "marked",
     ],
   },
 }));

@@ -16,7 +16,6 @@ export function PreviewApp({ filePath }: PreviewAppProps) {
   const [hasExternalChanges, setHasExternalChanges] = useState(false);
   const [reloadVersion, setReloadVersion] = useState(0);
   const [focusMode, setFocusMode] = useState(false);
-  const recentlySavedRef = useRef(false);
 
   // Load file on mount
   useEffect(() => {
@@ -36,10 +35,6 @@ export function PreviewApp({ filePath }: PreviewAppProps) {
   // Listen for window focus to detect external changes
   useEffect(() => {
     const handleFocus = async () => {
-      if (recentlySavedRef.current) {
-        recentlySavedRef.current = false;
-        return;
-      }
       try {
         const result = await filesService.readFileDirect(filePath);
         if (result.modified !== modified && content !== null) {
@@ -53,22 +48,6 @@ export function PreviewApp({ filePath }: PreviewAppProps) {
     window.addEventListener("focus", handleFocus);
     return () => window.removeEventListener("focus", handleFocus);
   }, [filePath, modified, content]);
-
-  const save = useCallback(
-    async (newContent: string) => {
-      try {
-        const result = await filesService.saveFileDirect(filePath, newContent);
-        recentlySavedRef.current = true;
-        setModified(result.modified);
-        setTitle(result.title);
-        setHasExternalChanges(false);
-      } catch (error) {
-        console.error("Failed to save file:", error);
-        toast.error(`Failed to save: ${error}`);
-      }
-    },
-    [filePath],
-  );
 
   const reload = useCallback(async () => {
     try {
@@ -143,7 +122,7 @@ export function PreviewApp({ filePath }: PreviewAppProps) {
       // Trap Tab to prevent focus leaving editor (only when editor is focused)
       if (e.key === "Tab") {
         const active = document.activeElement;
-        const editorEl = document.querySelector(".ProseMirror");
+        const editorEl = document.querySelector(".markdown-preview");
         if (editorEl && editorEl.contains(active)) {
           e.preventDefault();
         }
@@ -181,7 +160,6 @@ export function PreviewApp({ filePath }: PreviewAppProps) {
     modified,
     hasExternalChanges,
     reloadVersion,
-    save,
     reload,
   };
 

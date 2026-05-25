@@ -6,8 +6,6 @@ import { listen } from "@tauri-apps/api/event";
 import { TooltipProvider, Toaster } from "./components/ui";
 import { Sidebar } from "./components/layout/Sidebar";
 import { Editor } from "./components/editor/Editor";
-import { Crepe } from "@milkdown/crepe";
-import { editorViewCtx } from "@milkdown/kit/core";
 import { FolderPicker } from "./components/layout/FolderPicker";
 import { CommandPalette } from "./components/command-palette/CommandPalette";
 import { SettingsPage } from "./components/settings";
@@ -61,8 +59,6 @@ function AppContent() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  const editorRef = useRef<Crepe | null>(null);
-
   // Listen for set-notes-folder event from CLI (scratch .)
   // Placed here in AppContent where both NotesContext and ThemeContext are available
   useEffect(() => {
@@ -114,7 +110,7 @@ function AppContent() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      const isInEditor = !!target.closest(".ProseMirror");
+      const isInEditor = !!target.closest(".markdown-preview");
       const isInInput =
         target.tagName === "INPUT" || target.tagName === "TEXTAREA";
       const isEditorEmpty =
@@ -305,21 +301,16 @@ function AppContent() {
         return;
       }
 
-      // Enter to focus editor
+      // Enter to focus preview
       if (e.key === "Enter" && selectedNoteId && !isInEditor && !isInInput) {
         e.preventDefault();
-        const editor = document.querySelector(".ProseMirror") as HTMLElement;
-        if (editor) {
-          editor.focus();
-        }
         return;
       }
 
-      // Escape to blur editor and go back to note list
+      // Escape to blur preview and go back to note list
       if (e.key === "Escape" && isInEditor) {
         e.preventDefault();
         (target as HTMLElement).blur();
-        // Focus the note list for keyboard navigation
         window.dispatchEvent(new CustomEvent("focus-note-list"));
         return;
       }
@@ -330,7 +321,7 @@ function AppContent() {
       const target = e.target as HTMLElement;
       // Allow context menu in editor (prose class), inputs, and note list sidebar
       const isInEditor =
-        target.closest(".prose") || target.closest(".ProseMirror");
+        target.closest(".prose") || target.closest(".markdown-preview");
       const isInput =
         target.tagName === "INPUT" || target.tagName === "TEXTAREA";
       const isInNoteList = target.closest("[data-note-list]");
@@ -362,12 +353,6 @@ function AppContent() {
 
   const handleClosePalette = useCallback(() => {
     setPaletteOpen(false);
-    const editor = editorRef.current?.editor;
-    if (editor) {
-      editor.action((ctx) => {
-        ctx.get(editorViewCtx).focus();
-      });
-    }
   }, []);
 
   if (isLoading) {
@@ -402,9 +387,6 @@ function AppContent() {
               onToggleSidebar={toggleSidebar}
               sidebarVisible={sidebarVisible}
               focusMode={focusMode}
-              onEditorReady={(editor) => {
-                editorRef.current = editor;
-              }}
             />
           </>
         )}
@@ -430,7 +412,6 @@ function AppContent() {
         onOpenShortcuts={() => setShortcutsOpen(true)}
         focusMode={focusMode}
         onToggleFocusMode={toggleFocusMode}
-        editorRef={editorRef}
       />
     </>
   );

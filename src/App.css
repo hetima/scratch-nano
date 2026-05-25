@@ -304,7 +304,7 @@ html.dark {
 }
 
 /* Editor layout - max-width from settings */
-.ProseMirror {
+.markdown-preview {
   max-width: var(--editor-max-width, 48rem) !important;
   margin-left: auto;
   margin-right: auto;
@@ -1060,8 +1060,8 @@ table.not-prose th {
   #root,
   .prose,
   .prose *,
-  .ProseMirror,
-  .ProseMirror * {
+  .markdown-preview,
+  .markdown-preview * {
     background: white !important;
     color: black !important;
     box-shadow: none !important;
@@ -1138,15 +1138,7 @@ table.not-prose th {
   }
 
   /* Make editor full width for printing and remove editor padding */
-  .ProseMirror {
-    max-width: 100% !important;
-    padding: 0 !important;
-    margin: 0 !important;
-    overflow: visible !important;
-    height: auto !important;
-    overflow-wrap: break-word !important;
-  }
-
+  .markdown-preview,
   .prose {
     max-width: 100% !important;
     padding: 0 !important;
