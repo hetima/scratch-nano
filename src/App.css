@@ -163,40 +163,6 @@ body {
   scrollbar-gutter: stable;
 }
 
-/* Link tooltip in editor */
-.prose a {
-  position: relative;
-}
-
-.prose a::after {
-  content: "Ctrl + click to open";
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 0.25rem 0.5rem;
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--color-text-inverse);
-  background-color: var(--color-text);
-  border-radius: 0.25rem;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity 0.15s;
-  margin-bottom: 0.25rem;
-  z-index: 50;
-}
-
-/* Mac-specific tooltip */
-.platform-mac .prose a::after {
-  content: "⌘ + click to open";
-}
-
-.prose a:hover::after {
-  opacity: 1;
-}
-
 /* Smooth theme transitions */
 html {
   color-scheme: light;

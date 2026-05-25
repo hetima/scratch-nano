@@ -162,7 +162,7 @@ export function ListItem({
       role="button"
       tabIndex={-1}
       className={cn(
-        "w-full text-left px-2.5 py-1.5 transition-colors cursor-pointer select-none rounded-md",
+        "w-full text-left px-2 py-1 transition-colors cursor-pointer select-none rounded-md",
         "focus:outline-none focus-visible:outline-none",
         isSelected
           ? "bg-bg-muted group-focus/notelist:ring-1 group-focus/notelist:ring-text-muted"
@@ -174,7 +174,7 @@ export function ListItem({
           {isPinned && (
             <PinIcon className="w-4.25 h-4.25 stroke-[1.6] fill-current text-text-muted shrink-0" />
           )}
-          <span className={cn("text-sm font-medium truncate text-text")}>
+          <span className={cn("text-sm font-normal truncate text-text")}>
             {title}
           </span>
         </div>

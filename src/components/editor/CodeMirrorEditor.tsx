@@ -52,7 +52,7 @@ function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, co
         color: "var(--color-text)",
       },
       ".cm-activeLine": {
-        backgroundColor: "var(--color-bg-muted)",
+        backgroundColor: "transparent",
       },
       ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
         backgroundColor: "var(--color-selection) !important",
