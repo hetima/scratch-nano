@@ -14,7 +14,7 @@ import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useOptionalNotes, useOptionalNotesActions } from "../../context/NotesContext";
 import { useTheme, getFontFamilyValue } from "../../context/ThemeContext";
 import { EditorWidthHandles } from "./EditorWidthHandle";
-import { CodeMirrorEditor } from "./CodeMirrorEditor";
+import { CodeMirrorEditor, type CodeMirrorEditorHandle } from "./CodeMirrorEditor";
 import { cn } from "../../lib/utils";
 import { plainTextFromMarkdown } from "../../lib/plainText";
 import { Button, IconButton, Tooltip } from "../ui";
@@ -158,6 +158,19 @@ export function Editor({
 
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
+  const cmRef = useRef<CodeMirrorEditorHandle>(null);
+
+  // Focus CodeMirror editor at end of document after creating a new note
+  useEffect(() => {
+    if (!currentNote?.id || previewMode) return;
+    const isNew = notesCtx?.consumePendingNewNote(currentNote.id);
+    if (isNew) {
+      setSourceMode(true);
+      requestAnimationFrame(() => {
+        cmRef.current?.focusEnd();
+      });
+    }
+  }, [currentNote?.id, previewMode, notesCtx]);
 
   useEffect(() => {
     if (!hasTransitioned && currentNote) {
@@ -708,6 +721,7 @@ export function Editor({
             style={sourceMode ? undefined : { visibility: "hidden", pointerEvents: "none" }}
           >
             <CodeMirrorEditor
+              ref={cmRef}
               content={liveContent ?? currentNote.content}
               onSave={(newContent) => {
                 if (saveNote) {

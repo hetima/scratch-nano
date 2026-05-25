@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
 import { EditorState, Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
@@ -123,7 +123,12 @@ const CODE_LANGUAGES = [
   LanguageDescription.of({ name: "xml", load: async () => (await import("@codemirror/lang-xml")).xml() }),
 ];
 
-export function CodeMirrorEditor({
+export interface CodeMirrorEditorHandle {
+  focus(): void;
+  focusEnd(): void;
+}
+
+export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEditorProps>(function CodeMirrorEditor({
   content,
   onSave,
   onChange,
@@ -135,12 +140,25 @@ export function CodeMirrorEditor({
   isDark,
   showLineNumbers = false,
   scrollResetKey,
-}: CodeMirrorEditorProps) {
+}: CodeMirrorEditorProps, ref) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartment = useRef(new Compartment());
   const lineNumbersCompartment = useRef(new Compartment());
   const codeFontCompartment = useRef(new Compartment());
+
+  useImperativeHandle(ref, () => ({
+    focus() {
+      viewRef.current?.focus();
+    },
+    focusEnd() {
+      const view = viewRef.current;
+      if (!view) return;
+      view.dispatch({ selection: { anchor: view.state.doc.length } });
+      view.focus();
+    },
+  }), []);
+
   // Track the content we last set from outside, to avoid clobbering user edits
   // and to know when a save is actually needed
   const lastSetContent = useRef(content);
@@ -256,4 +274,4 @@ export function CodeMirrorEditor({
       dir={textDirection}
     />
   );
-}
+});
