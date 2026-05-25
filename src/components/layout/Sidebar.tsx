@@ -20,9 +20,9 @@ import {
   XIcon,
   NoteIcon,
 } from "../icons";
-import { mod, isMac } from "../../lib/platform";
 import * as notesService from "../../services/notes";
 import { FolderNameDialog } from "../notes/FolderNameDialog";
+import { Tooltip } from "../ui/Tooltip";
 
 interface SidebarProps {
   onOpenSettings?: () => void;
@@ -420,18 +420,19 @@ function FolderSelector({
 }) {
   return (
     <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          className="flex items-center gap-1 font-medium text-base text-text hover:text-text-muted truncate max-w-44 titlebar-no-drag cursor-pointer"
-          title={activeFolder ?? undefined}
-        >
-          <span className="truncate">{activeFolder ? folderName(activeFolder) : "Notes"}</span>
-          <svg className="w-3.5 h-3.5 shrink-0 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-      </DropdownMenu.Trigger>
+      <Tooltip content={activeFolder ?? undefined} side="bottom">
+        <DropdownMenu.Trigger asChild>
+          <button
+            type="button"
+            className="flex items-center gap-1 font-medium text-base text-text hover:text-text-muted truncate max-w-44 titlebar-no-drag cursor-pointer"
+          >
+            <span className="truncate">{activeFolder ? folderName(activeFolder) : "Notes"}</span>
+            <svg className="w-3.5 h-3.5 shrink-0 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+        </DropdownMenu.Trigger>
+      </Tooltip>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
           className="min-w-44 bg-bg border border-border rounded-md shadow-lg py-1 z-50"
@@ -444,7 +445,6 @@ function FolderSelector({
               key={folder}
               className="px-3 py-1.5 text-sm cursor-pointer outline-none hover:bg-bg-muted focus:bg-bg-muted flex items-center gap-2 truncate"
               onSelect={() => onSwitch(folder)}
-              title={folder}
             >
               {activeFolder === folder && (
                 <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>

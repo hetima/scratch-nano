@@ -310,6 +310,7 @@ export function NoteList({
             <AlertDialogHeader>
               <AlertDialogTitle>Delete note?</AlertDialogTitle>
               <AlertDialogDescription>
+                <span className="block font-medium text-text mb-1">{noteToDelete}</span>
                 This will permanently delete the note and all its content. This
                 action cannot be undone.
               </AlertDialogDescription>
@@ -356,6 +357,7 @@ export function NoteList({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete note?</AlertDialogTitle>
             <AlertDialogDescription>
+              <span className="block font-medium text-text mb-1">{noteToDelete}</span>
               This will permanently delete the note and all its content. This
               action cannot be undone.
             </AlertDialogDescription>

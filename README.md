@@ -10,16 +10,12 @@ A super minimal, offline-first markdown note-taking app for macOS, Windows, and 
 
 - **Offline-first** - No cloud, no account, no internet required
 - **Markdown-based** - Notes stored as plain `.md` files you own
-- **WYSIWYG editing** - Rich text editing that saves as markdown
 - **Preview mode** - Open any `.md` file via drag-and-drop or "Open With" without a notes folder
-- **Markdown source mode** - Toggle to view and edit raw markdown (`Cmd+Shift+M`)
+- **Markdown source mode** - Toggle to view and edit raw markdown (`Cmd+U`)
 - **Syntax highlighting** - 20 languages with GitHub-inspired color scheme
 - **Mermaid diagrams** - Render flowcharts, sequence diagrams, and more in fenced code blocks
-- **KaTeX math** - Render block `$$...$$` math equations
-- **Slash commands** - Type `/` to quickly insert headings, lists, code blocks, diagrams, and more
 - **Focus mode** - Distraction-free writing with animated sidebar/toolbar fade (`Cmd+Shift+Enter`)
 - **Folders** - Opt-in collapsible folder tree with drag-and-drop to organize notes
-- **Keyboard optimized** - Lots of shortcuts and a command palette
 - **Customizable** - Theme, typography, page width, and RTL text direction
 - **Lightweight** - 5-10x smaller than Obsidian or Notion
 
@@ -70,7 +66,7 @@ Scratch is designed to be usable without a mouse. Here are the essentials to get
 | `Cmd+K`           | Add/edit link          |
 | `Cmd+F`           | Find in note           |
 | `Cmd+Shift+C`     | Copy & Export menu     |
-| `Cmd+Shift+M`     | Toggle Markdown source |
+| `Cmd+U`           | Toggle Markdown source |
 | `Cmd+Shift+Enter` | Toggle Focus mode      |
 | `Cmd+Shift+F`     | Search notes           |
 | `Cmd+R`           | Reload current note    |

@@ -26,6 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "../ui";
+import { FolderNameDialog } from "../notes/FolderNameDialog";
 
 import { plainTextFromMarkdown } from "../../lib/plainText";
 import { duplicateNote } from "../../services/notes";
@@ -73,7 +74,7 @@ export function CommandPalette({
   const {
     notes,
     selectNote,
-    createNote,
+    createNoteWithName,
     deleteNote,
     currentNote,
     refreshNotes,
@@ -86,6 +87,7 @@ export function CommandPalette({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
+  const [newNoteDialogOpen, setNewNoteDialogOpen] = useState(false);
   const [localSearchResults, setLocalSearchResults] = useState<
     { id: string; title: string; preview: string; modified: number }[]
   >([]);
@@ -108,11 +110,10 @@ export function CommandPalette({
       {
         id: "new-note",
         label: "New Note",
-        shortcut: `${mod} N`,
+        shortcut: undefined,
         icon: <AddNoteIcon className="w-4.5 h-4.5 stroke-[1.5]" />,
         action: () => {
-          createNote();
-          onClose();
+          setNewNoteDialogOpen(true);
         },
       },
       {
@@ -280,7 +281,7 @@ export function CommandPalette({
       {
         id: "toggle-source",
         label: "Toggle Markdown Source",
-        shortcut: `${mod} ${shift} M`,
+        shortcut: `${mod} U`,
         icon: <MarkdownIcon className="w-4.5 h-4.5 stroke-[1.5]" />,
         action: () => {
           window.dispatchEvent(new CustomEvent("toggle-source-mode"));
@@ -360,7 +361,7 @@ export function CommandPalette({
 
     return baseCommands;
   }, [
-    createNote,
+    createNoteWithName,
     currentNote,
     deleteNote,
     onClose,
@@ -610,12 +611,27 @@ export function CommandPalette({
         </div>
       </div>
 
+      {/* New note name dialog */}
+      <FolderNameDialog
+        open={newNoteDialogOpen}
+        onOpenChange={setNewNoteDialogOpen}
+        title="New Note"
+        description="Enter a name for your new note"
+        confirmLabel="Create"
+        onConfirm={(name) => {
+          setNewNoteDialogOpen(false);
+          createNoteWithName(name);
+          onClose();
+        }}
+      />
+
       {/* Delete confirmation dialog */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete note?</AlertDialogTitle>
             <AlertDialogDescription>
+              <span className="block font-medium text-text mb-1">{noteToDelete}</span>
               This will permanently delete the note and all its content. This
               action cannot be undone.
             </AlertDialogDescription>

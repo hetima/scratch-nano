@@ -836,6 +836,7 @@ export function FolderTreeView({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete folder?</AlertDialogTitle>
             <AlertDialogDescription>
+              <span className="block font-medium text-text mb-1">{folderToDelete}</span>
               This will permanently delete the folder and all notes inside it.
               This action cannot be undone.
             </AlertDialogDescription>
@@ -885,6 +886,7 @@ export function FolderTreeView({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete note?</AlertDialogTitle>
             <AlertDialogDescription>
+              <span className="block font-medium text-text mb-1">{noteToDelete}</span>
               This will permanently delete the note and all its content. This
               action cannot be undone.
             </AlertDialogDescription>
