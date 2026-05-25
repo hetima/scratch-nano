@@ -1,5 +1,5 @@
-import { useTheme, defaultThemeColors, getFontFamilyValue } from "../../context/ThemeContext";
-import { Button, CodeCopyButton, IconButton, Input, Select } from "../ui";
+import { useTheme, defaultThemeColors } from "../../context/ThemeContext";
+import { Button, IconButton, Input, Select } from "../ui";
 import { Combobox } from "../ui/Combobox";
 import { ColorPicker } from "../ui/ColorPicker";
 import type {
@@ -8,7 +8,7 @@ import type {
   EditorWidth,
   ThemeColorKey,
 } from "../../types/note";
-import { ChevronRightIcon, EyeIcon, MinusIcon, PlusIcon } from "../icons";
+import { ChevronRightIcon, MinusIcon, PlusIcon } from "../icons";
 import { cn } from "../../lib/utils";
 import { getSystemFonts } from "tauri-plugin-system-fonts-api";
 import { useState, useEffect, useMemo, useCallback } from "react";
@@ -432,107 +432,6 @@ export function AppearanceSettingsSection() {
               />
             </div>
           </div>
-        </div>
-
-        {/* Preview */}
-        <div className="mt-3 relative">
-          <div className="absolute top-3 left-4 flex items-center text-sm font-medium text-text-muted/70 gap-1">
-            <EyeIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-            <span>Preview</span>
-          </div>
-          <div className="border border-border rounded-[10px] bg-bg p-6 pt-20 max-h-160 overflow-hidden rounded-t-lg">
-            <div
-              className="prose prose-lg dark:prose-invert max-w-xl mx-auto"
-              dir={textDirection}
-              style={{
-                fontFamily: getFontFamilyValue(editorFontSettings.baseFontFamily),
-                fontSize: `${editorFontSettings.baseFontSize}px`,
-              }}
-            >
-              <h1>Kibble Maximization Protocol</h1>
-              <p>
-                A comprehensive strategy document for getting your humans to
-                increase daily food portions.{" "}
-                <strong>Time-tested methods</strong> that actually work.
-              </p>
-
-              <h2>Primary Techniques</h2>
-              <ul>
-                <li>
-                  <strong>The Sad Eyes Method</strong> - Sit near food bowl,
-                  stare longingly
-                </li>
-                <li>
-                  <strong>Strategic Meowing</strong> - Begin at 5 AM for maximum
-                  effectiveness
-                </li>
-                <li>
-                  <strong>Bowl Inspection</strong> - Loudly inspect empty bowl,
-                  then stare at human
-                </li>
-                <li>
-                  <strong>The Figure Eight</strong> - Weave between their legs
-                  while they cook
-                </li>
-              </ul>
-
-              <h2>Advanced Protocol</h2>
-              <p>
-                For optimal results, combine multiple techniques. The most
-                successful combination involves the Sad Eyes Method followed
-                immediately by Strategic Meowing.
-              </p>
-
-              <div className="relative my-1">
-                <div className="absolute top-2 right-2 z-10">
-                  <CodeCopyButton
-                    text={`function acquireFood() {
-  while (bowl.isEmpty()) {
-    meow();
-    rubAgainstLegs();
-    if (human.isInKitchen) {
-      stareIntently();
-    }
-  }
-}`}
-                  />
-                </div>
-                <pre
-                  className="pt-10"
-                  style={{ fontFamily: getFontFamilyValue(editorFontSettings.codeFontFamily) }}
-                >
-                  <code>
-                    {`function acquireFood() {
-  while (bowl.isEmpty()) {
-    meow();
-    rubAgainstLegs();
-    if (human.isInKitchen) {
-      stareIntently();
-    }
-  }
-}`}
-                  </code>
-                </pre>
-              </div>
-
-              <h2>Common Mistakes to Avoid</h2>
-              <ol>
-                <li>Never accept the first "no" - persistence is key</li>
-                <li>
-                  Maintain consistency in meal times (your schedule, not theirs)
-                </li>
-                <li>Don't forget to knock things off counters periodically</li>
-              </ol>
-
-              <p>
-                Remember: <em>humans are trainable</em>. With dedication and the
-                right approach, you can increase portions by up to 40% within
-                the first month.
-              </p>
-            </div>
-          </div>
-          {/* Fade overlay - content to muted background */}
-          <div className="absolute bottom-0 left-0 right-0 h-40 bg-linear-to-t from-bg to-transparent pointer-events-none" />
         </div>
       </section>
 
