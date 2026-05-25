@@ -36,10 +36,15 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     notes,
     search,
     searchQuery,
+    searchResults,
     clearSearch,
     selectedNoteId,
+    selectNote,
     moveNote,
     moveFolder,
+    notesFolders,
+    notesFolder,
+    switchNotesFolder,
   } = useNotes();
   const [inputValue, setInputValue] = useState(searchQuery);
   const [plusMenuOpen, setPlusMenuOpen] = useState(false);
@@ -220,9 +225,29 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           setInputValue("");
           clearSearch();
         }
+      } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        // Only navigate when showing a flat list (searching, or folders disabled)
+        if (foldersEnabled && !searchQuery.trim()) return;
+        e.preventDefault();
+        const displayItems = searchQuery.trim()
+          ? searchResults
+          : notes;
+        if (displayItems.length === 0) return;
+        const currentIndex = selectedNoteId
+          ? displayItems.findIndex((item) => item.id === selectedNoteId)
+          : -1;
+        let nextIndex: number;
+        if (e.key === "ArrowDown") {
+          nextIndex = currentIndex < displayItems.length - 1 ? currentIndex + 1 : currentIndex;
+        } else {
+          nextIndex = currentIndex > 0 ? currentIndex - 1 : 0;
+        }
+        if (nextIndex !== currentIndex) {
+          selectNote(displayItems[nextIndex].id);
+        }
       }
     },
-    [inputValue, clearSearch],
+    [inputValue, clearSearch, searchQuery, searchResults, notes, selectedNoteId, selectNote],
   );
 
   const handleClearSearch = useCallback(() => {
@@ -277,11 +302,21 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     <div className="relative w-64 h-full bg-bg-secondary border-r border-border flex flex-col select-none">
       {/* Header row with drag region */}
       <div className="h-11 shrink-0 flex items-center justify-between pl-4 pr-3" data-tauri-drag-region>
-        <div className="flex items-center gap-1">
-          <div className="font-medium text-base">Notes</div>
-          <div className="text-text-muted font-medium text-2xs min-w-4.75 h-4.75 flex items-center justify-center px-1 bg-bg-muted rounded-sm mt-0.5 pt-px">
-            {notes.length}
-          </div>
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          {notesFolders.length > 1 ? (
+            <FolderSelector
+              folders={notesFolders}
+              activeFolder={notesFolder}
+              onSwitch={switchNotesFolder}
+            />
+          ) : (
+            <>
+              <div className="font-medium text-base">Notes</div>
+              <div className="text-text-muted font-medium text-2xs min-w-4.75 h-4.75 flex items-center justify-center px-1 bg-bg-muted rounded-sm mt-0.5 pt-px">
+                {notes.length}
+              </div>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-px titlebar-no-drag">
           {foldersEnabled ? (
@@ -399,5 +434,61 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       )}
     </DragOverlay>
     </DndContext>
+  );
+}
+
+function folderName(path: string): string {
+  const last = path.replace(/[/\\]+$/, "").split(/[/\\]/).pop();
+  return last || path;
+}
+
+function FolderSelector({
+  folders,
+  activeFolder,
+  onSwitch,
+}: {
+  folders: string[];
+  activeFolder: string | null;
+  onSwitch: (path: string) => void;
+}) {
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className="flex items-center gap-1 font-medium text-base text-text hover:text-text-muted truncate max-w-44 titlebar-no-drag cursor-pointer"
+          title={activeFolder ?? undefined}
+        >
+          <span className="truncate">{activeFolder ? folderName(activeFolder) : "Notes"}</span>
+          <svg className="w-3.5 h-3.5 shrink-0 text-text-muted" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          className="min-w-44 bg-bg border border-border rounded-md shadow-lg py-1 z-50"
+          sideOffset={5}
+          align="start"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+        >
+          {folders.map((folder) => (
+            <DropdownMenu.Item
+              key={folder}
+              className="px-3 py-1.5 text-sm cursor-pointer outline-none hover:bg-bg-muted focus:bg-bg-muted flex items-center gap-2 truncate"
+              onSelect={() => onSwitch(folder)}
+              title={folder}
+            >
+              {activeFolder === folder && (
+                <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+              <span className={`truncate${activeFolder === folder ? "" : " pl-5"}`}>{folderName(folder)}</span>
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }

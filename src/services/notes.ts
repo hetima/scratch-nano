@@ -1,12 +1,16 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Note, NoteMetadata, Settings, PinnedNotes } from "../types/note";
 
-export async function getNotesFolder(): Promise<string | null> {
-  return invoke("get_notes_folder");
+export async function getNotesFolders(): Promise<string[]> {
+  return invoke("get_notes_folders");
 }
 
-export async function setNotesFolder(path: string): Promise<void> {
-  return invoke("set_notes_folder", { path });
+export async function addNotesFolder(path: string): Promise<void> {
+  return invoke("add_notes_folder", { path });
+}
+
+export async function removeNotesFolder(path: string): Promise<void> {
+  return invoke("remove_notes_folder", { path });
 }
 
 export async function listNotes(): Promise<NoteMetadata[]> {
@@ -100,6 +104,10 @@ export async function searchNotes(query: string): Promise<SearchResult[]> {
   return invoke("search_notes", { query });
 }
 
-export async function startFileWatcher(): Promise<void> {
-  return invoke("start_file_watcher");
+export async function startFileWatcher(folder: string): Promise<void> {
+  return invoke("start_file_watcher", { folder });
+}
+
+export async function rebuildSearchIndex(): Promise<void> {
+  return invoke("rebuild_search_index");
 }

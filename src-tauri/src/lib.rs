@@ -102,10 +102,13 @@ pub enum TextDirection {
     Rtl,
 }
 
-// App config (stored in app data directory - just the notes folder path)
+// App config (stored in app data directory - list of notes folder paths)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
-    pub notes_folder: Option<String>,
+    pub notes_folders: Vec<String>,
+    // Currently active folder (not persisted to disk - runtime only)
+    #[serde(skip)]
+    pub active_folder: Option<String>,
 }
 
 // Pinned notes (stored in pinned-files.json in app data directory)
@@ -165,6 +168,7 @@ pub struct SearchIndex {
     #[allow(dead_code)]
     schema: Schema,
     id_field: Field,
+    folder_field: Field,
     title_field: Field,
     content_field: Field,
     modified_field: Field,
@@ -172,15 +176,19 @@ pub struct SearchIndex {
 
 impl SearchIndex {
     fn new(index_path: &PathBuf) -> Result<Self> {
+        // Remove stale index dir so schema changes take effect cleanly
+        if index_path.exists() {
+            let _ = std::fs::remove_dir_all(index_path);
+        }
         // Build schema
         let mut schema_builder = Schema::builder();
         let id_field = schema_builder.add_text_field("id", STRING | STORED);
+        let folder_field = schema_builder.add_text_field("folder", STRING | STORED);
         let title_field = schema_builder.add_text_field("title", TEXT | STORED);
         let content_field = schema_builder.add_text_field("content", TEXT | STORED);
         let modified_field = schema_builder.add_i64_field("modified", INDEXED | STORED);
         let schema = schema_builder.build();
 
-        // Create or open index
         std::fs::create_dir_all(index_path)?;
         let index = Index::create_in_dir(index_path, schema.clone())
             .or_else(|_| Index::open_in_dir(index_path))?;
@@ -198,22 +206,23 @@ impl SearchIndex {
             writer: Mutex::new(writer),
             schema,
             id_field,
+            folder_field,
             title_field,
             content_field,
             modified_field,
         })
     }
 
-    fn index_note(&self, id: &str, title: &str, content: &str, modified: i64) -> Result<()> {
+    fn index_note(&self, id: &str, folder: &str, title: &str, content: &str, modified: i64) -> Result<()> {
         let mut writer = self.writer.lock().expect("search writer mutex");
 
         // Delete existing document with this ID
         let id_term = tantivy::Term::from_field_text(self.id_field, id);
         writer.delete_term(id_term);
 
-        // Add new document
         writer.add_document(doc!(
             self.id_field => id,
+            self.folder_field => folder,
             self.title_field => title,
             self.content_field => content,
             self.modified_field => modified,
@@ -231,17 +240,85 @@ impl SearchIndex {
         Ok(())
     }
 
-    fn search(&self, query_str: &str, limit: usize) -> Result<Vec<SearchResult>> {
+    fn index_folder(&self, notes_folder: &PathBuf, ignored_dirs: &[String]) -> Result<()> {
+        let folder_str = notes_folder.to_string_lossy().into_owned();
+        {
+            // Remove all existing documents for this folder before re-indexing
+            let mut writer = self.writer.lock().expect("search writer mutex");
+            let folder_term = tantivy::Term::from_field_text(self.folder_field, &folder_str);
+            writer.delete_term(folder_term);
+            writer.commit()?;
+        }
+
+        if !notes_folder.exists() {
+            return Ok(());
+        }
+
+        let mut writer = self.writer.lock().expect("search writer mutex");
+        use walkdir::WalkDir;
+        for entry in WalkDir::new(notes_folder)
+            .max_depth(10)
+            .into_iter()
+            .filter_entry(|e| is_visible_notes_entry(e, ignored_dirs))
+            .flatten()
+        {
+            let file_path = entry.path();
+            if !file_path.is_file() {
+                continue;
+            }
+            if let Some(id) = id_from_abs_path(notes_folder, file_path, ignored_dirs) {
+                if let Ok(content) = std::fs::read_to_string(file_path) {
+                    let modified = entry
+                        .metadata()
+                        .ok()
+                        .and_then(|m| m.modified().ok())
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_secs() as i64)
+                        .unwrap_or(0);
+                    let title = extract_title(&content);
+                    writer.add_document(doc!(
+                        self.id_field => id.as_str(),
+                        self.folder_field => folder_str.as_str(),
+                        self.title_field => title,
+                        self.content_field => content.as_str(),
+                        self.modified_field => modified,
+                    ))?;
+                }
+            }
+        }
+        writer.commit()?;
+        Ok(())
+    }
+
+    fn remove_folder(&self, notes_folder: &str) -> Result<()> {
+        let mut writer = self.writer.lock().expect("search writer mutex");
+        let folder_term = tantivy::Term::from_field_text(self.folder_field, notes_folder);
+        writer.delete_term(folder_term);
+        writer.commit()?;
+        Ok(())
+    }
+
+    fn search(&self, query_str: &str, folder: &str, limit: usize) -> Result<Vec<SearchResult>> {
+        use tantivy::query::{BooleanQuery, Occur, TermQuery};
+        use tantivy::schema::IndexRecordOption;
+
         let searcher = self.reader.searcher();
         let query_parser =
             QueryParser::for_index(&self.index, vec![self.title_field, self.content_field]);
 
-        // Parse query, fall back to prefix query if parsing fails
-        let query = query_parser
+        let text_query = query_parser
             .parse_query(query_str)
             .or_else(|_| query_parser.parse_query(&format!("{}*", query_str)))?;
 
-        let top_docs = searcher.search(&query, &TopDocs::with_limit(limit))?;
+        let folder_term = tantivy::Term::from_field_text(self.folder_field, folder);
+        let folder_query = Box::new(TermQuery::new(folder_term, IndexRecordOption::Basic));
+
+        let combined = BooleanQuery::new(vec![
+            (Occur::Must, folder_query),
+            (Occur::Must, text_query),
+        ]);
+
+        let top_docs = searcher.search(&combined, &TopDocs::with_limit(limit))?;
 
         let mut results = Vec::with_capacity(top_docs.len());
         for (score, doc_address) in top_docs {
@@ -281,49 +358,6 @@ impl SearchIndex {
         }
 
         Ok(results)
-    }
-
-    fn rebuild_index(&self, notes_folder: &PathBuf, ignored_dirs: &[String]) -> Result<()> {
-        let mut writer = self.writer.lock().expect("search writer mutex");
-        writer.delete_all_documents()?;
-
-        if notes_folder.exists() {
-            use walkdir::WalkDir;
-            for entry in WalkDir::new(notes_folder)
-                .max_depth(10)
-                .into_iter()
-                .filter_entry(|e| is_visible_notes_entry(e, ignored_dirs))
-                .flatten()
-            {
-                let file_path = entry.path();
-                if !file_path.is_file() {
-                    continue;
-                }
-                if let Some(id) = id_from_abs_path(notes_folder, file_path, ignored_dirs) {
-                    if let Ok(content) = std::fs::read_to_string(file_path) {
-                        let modified = entry
-                            .metadata()
-                            .ok()
-                            .and_then(|m| m.modified().ok())
-                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-                            .map(|d| d.as_secs() as i64)
-                            .unwrap_or(0);
-
-                        let title = extract_title(&content);
-
-                        writer.add_document(doc!(
-                            self.id_field => id.as_str(),
-                            self.title_field => title,
-                            self.content_field => content.as_str(),
-                            self.modified_field => modified,
-                        ))?;
-                    }
-                }
-            }
-        }
-
-        writer.commit()?;
-        Ok(())
     }
 }
 
@@ -708,11 +742,11 @@ fn abs_path_from_id(notes_root: &Path, id: &str) -> Result<PathBuf, String> {
     Ok(file_path)
 }
 
-// Get app config file path (in app data directory)
-fn get_app_config_path(app: &AppHandle) -> Result<PathBuf> {
+// Get notes folders config file path (in app data directory)
+fn get_notes_folders_path(app: &AppHandle) -> Result<PathBuf> {
     let app_data = app.path().app_data_dir()?;
     std::fs::create_dir_all(&app_data)?;
-    Ok(app_data.join("config.json"))
+    Ok(app_data.join("notes-folders.json"))
 }
 
 // Get settings file path (in app data directory)
@@ -729,9 +763,9 @@ fn get_search_index_path(app: &AppHandle) -> Result<PathBuf> {
     Ok(app_data.join("search_index"))
 }
 
-// Load app config from disk (notes folder path)
+// Load notes folders config from disk
 fn load_app_config(app: &AppHandle) -> AppConfig {
-    let path = match get_app_config_path(app) {
+    let path = match get_notes_folders_path(app) {
         Ok(p) => p,
         Err(_) => return AppConfig::default(),
     };
@@ -746,9 +780,9 @@ fn load_app_config(app: &AppHandle) -> AppConfig {
     }
 }
 
-// Save app config to disk
+// Save notes folders config to disk
 fn save_app_config(app: &AppHandle, config: &AppConfig) -> Result<()> {
-    let path = get_app_config_path(app)?;
+    let path = get_notes_folders_path(app)?;
     let content = serde_json::to_string_pretty(config)?;
     std::fs::write(path, content)?;
     Ok(())
@@ -819,7 +853,7 @@ fn save_pinned_notes(app: &AppHandle, pinned: &PinnedNotes) -> Result<()> {
 fn migrate_pinned_paths_to_absolute(app: &AppHandle, state: &AppState) {
     let notes_folder = {
         let cfg = state.app_config.read().expect("app_config read lock");
-        match cfg.notes_folder.clone() {
+        match cfg.active_folder.clone() {
             Some(f) => f,
             None => return,
         }
@@ -892,10 +926,12 @@ fn initialize_notes_folder(app: &AppHandle, path_buf: &PathBuf, state: &AppState
     // Load settings (starts fresh with defaults if none exist)
     let settings = load_settings(app);
 
-    // Update app config
+    // Update app config (add folder if not already present)
     {
         let mut app_config = state.app_config.write().expect("app_config write lock");
-        app_config.notes_folder = Some(normalized_path.clone());
+        if !app_config.notes_folders.contains(&normalized_path) {
+            app_config.notes_folders.push(normalized_path.clone());
+        }
     }
 
     // Update settings in memory
@@ -913,16 +949,20 @@ fn initialize_notes_folder(app: &AppHandle, path_buf: &PathBuf, state: &AppState
     // Add notes folder to asset protocol scope so images can be served
     let _ = app.asset_protocol_scope().allow_directory(path_buf, true);
 
-    // Initialize search index
-    if let Ok(index_path) = get_search_index_path(app) {
-        if let Ok(search_index) = SearchIndex::new(&index_path) {
-            let ignored_dirs = {
-                let settings = state.settings.read().expect("settings read lock");
-                get_effective_ignored_dirs(&settings)
-            };
-            let _ = search_index.rebuild_index(path_buf, &ignored_dirs);
-            let mut index = state.search_index.lock().expect("search index mutex");
-            *index = Some(search_index);
+    // Add this folder to the shared search index
+    {
+        let ignored_dirs = {
+            let settings = state.settings.read().expect("settings read lock");
+            get_effective_ignored_dirs(&settings)
+        };
+        let mut index = state.search_index.lock().expect("search index mutex");
+        if let Some(ref search_index) = *index {
+            let _ = search_index.index_folder(path_buf, &ignored_dirs);
+        } else if let Ok(index_path) = get_search_index_path(app) {
+            if let Ok(search_index) = SearchIndex::new(&index_path) {
+                let _ = search_index.index_folder(path_buf, &ignored_dirs);
+                *index = Some(search_index);
+            }
         }
     }
 
@@ -932,20 +972,37 @@ fn initialize_notes_folder(app: &AppHandle, path_buf: &PathBuf, state: &AppState
 // TAURI COMMANDS
 
 #[tauri::command]
-fn get_notes_folder(state: State<AppState>) -> Option<String> {
+fn get_notes_folders(state: State<AppState>) -> Vec<String> {
     state
         .app_config
         .read()
         .expect("app_config read lock")
-        .notes_folder
+        .notes_folders
         .clone()
 }
 
 #[tauri::command]
-fn set_notes_folder(app: AppHandle, path: String, state: State<AppState>) -> Result<(), String> {
+fn add_notes_folder(app: AppHandle, path: String, state: State<AppState>) -> Result<(), String> {
     let path_buf = normalize_notes_folder_path(&path)?;
     initialize_notes_folder(&app, &path_buf, &state)?;
     Ok(())
+}
+
+#[tauri::command]
+fn remove_notes_folder(path: String, state: State<AppState>, app: AppHandle) -> Result<(), String> {
+    {
+        let mut app_config = state.app_config.write().expect("app_config write lock");
+        app_config.notes_folders.retain(|f| f != &path);
+    }
+    // Remove this folder's documents from the shared search index
+    {
+        let index = state.search_index.lock().expect("search index mutex");
+        if let Some(ref search_index) = *index {
+            let _ = search_index.remove_folder(&path);
+        }
+    }
+    save_app_config(&app, &state.app_config.read().expect("app_config read lock"))
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -953,7 +1010,7 @@ async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteMetadata>, Str
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1047,7 +1104,7 @@ async fn read_note(id: String, state: State<'_, AppState>) -> Result<Note, Strin
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1090,7 +1147,7 @@ async fn save_note(
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1140,7 +1197,7 @@ async fn save_note(
     {
         let index = state.search_index.lock().expect("search index mutex");
         if let Some(ref search_index) = *index {
-            let _ = search_index.index_note(&final_id, &title, &content, modified);
+            let _ = search_index.index_note(&final_id, &folder, &title, &content, modified);
         }
     }
 
@@ -1158,7 +1215,7 @@ async fn delete_note(id: String, state: State<'_, AppState>, app: AppHandle) -> 
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1204,7 +1261,7 @@ async fn create_note(target_folder: Option<String>, state: State<'_, AppState>) 
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1286,7 +1343,7 @@ async fn create_note(target_folder: Option<String>, state: State<'_, AppState>) 
     {
         let index = state.search_index.lock().expect("search index mutex");
         if let Some(ref search_index) = *index {
-            let _ = search_index.index_note(&final_id, &display_title, &content, modified);
+            let _ = search_index.index_note(&final_id, &folder, &display_title, &content, modified);
         }
     }
 
@@ -1338,7 +1395,7 @@ async fn list_folders(state: State<'_, AppState>) -> Result<Vec<String>, String>
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1380,7 +1437,7 @@ async fn create_folder(path: String, state: State<'_, AppState>) -> Result<(), S
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1405,7 +1462,7 @@ async fn delete_folder(path: String, state: State<'_, AppState>) -> Result<(), S
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1460,7 +1517,7 @@ async fn rename_folder(
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1552,7 +1609,7 @@ async fn rename_folder(
         }
     }
 
-    // Rebuild search index for affected notes
+    // Re-index the notes folder (IDs changed due to rename)
     {
         let index = state.search_index.lock().expect("search index mutex");
         if let Some(ref search_index) = *index {
@@ -1560,7 +1617,7 @@ async fn rename_folder(
                 let settings = state.settings.read().expect("settings read lock");
                 get_effective_ignored_dirs(&settings)
             };
-            let _ = search_index.rebuild_index(&folder_root, &ignored_dirs);
+            let _ = search_index.index_folder(&folder_root, &ignored_dirs);
         }
     }
 
@@ -1577,7 +1634,7 @@ async fn move_note(
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1645,15 +1702,21 @@ async fn move_note(
         }
     }
 
-    // Rebuild search index
+    // Update search index: remove old ID, add new ID
     {
         let index = state.search_index.lock().expect("search index mutex");
         if let Some(ref search_index) = *index {
-            let ignored_dirs = {
-                let settings = state.settings.read().expect("settings read lock");
-                get_effective_ignored_dirs(&settings)
-            };
-            let _ = search_index.rebuild_index(&folder_root, &ignored_dirs);
+            let _ = search_index.delete_note(&id);
+            if let Ok(content) = std::fs::read_to_string(&dest_path) {
+                let title = extract_title(&content);
+                let modified = std::fs::metadata(&dest_path)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                    .map(|d| d.as_secs() as i64)
+                    .unwrap_or(0);
+                let _ = search_index.index_note(&new_id, &folder, &title, &content, modified);
+            }
         }
     }
 
@@ -1670,7 +1733,7 @@ async fn move_folder(
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -1765,7 +1828,7 @@ async fn move_folder(
         }
     }
 
-    // Rebuild search index
+    // Re-index the notes folder (IDs changed due to move)
     {
         let index = state.search_index.lock().expect("search index mutex");
         if let Some(ref search_index) = *index {
@@ -1773,7 +1836,7 @@ async fn move_folder(
                 let settings = state.settings.read().expect("settings read lock");
                 get_effective_ignored_dirs(&settings)
             };
-            let _ = search_index.rebuild_index(&folder_root, &ignored_dirs);
+            let _ = search_index.index_folder(&folder_root, &ignored_dirs);
         }
     }
 
@@ -1829,7 +1892,7 @@ fn update_pinned_notes(
 fn pin_note(id: String, state: State<AppState>, app: AppHandle) -> Result<(), String> {
     let folder = {
         let cfg = state.app_config.read().expect("app_config read lock");
-        cfg.notes_folder.clone().ok_or("Notes folder not set")?
+        cfg.active_folder.clone().ok_or("Notes folder not set")?
     };
     let abs_path = abs_path_from_id(&PathBuf::from(&folder), &id)?;
     let abs_str = abs_path.to_string_lossy().into_owned();
@@ -1847,7 +1910,7 @@ fn pin_note(id: String, state: State<AppState>, app: AppHandle) -> Result<(), St
 fn unpin_note(id: String, state: State<AppState>, app: AppHandle) -> Result<(), String> {
     let folder = {
         let cfg = state.app_config.read().expect("app_config read lock");
-        cfg.notes_folder.clone().ok_or("Notes folder not set")?
+        cfg.active_folder.clone().ok_or("Notes folder not set")?
     };
     let abs_path = abs_path_from_id(&PathBuf::from(&folder), &id)?;
     let abs_str = abs_path.to_string_lossy().into_owned();
@@ -1987,7 +2050,7 @@ async fn import_file_to_folder(
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -2047,7 +2110,7 @@ async fn import_file_to_folder(
     {
         let index = state.search_index.lock().expect("search index mutex");
         if let Some(ref search_index) = *index {
-            let _ = search_index.index_note(&final_id, &extracted_title, &content, modified);
+            let _ = search_index.index_note(&final_id, &folder, &extracted_title, &content, modified);
         }
     }
 
@@ -2089,11 +2152,16 @@ async fn search_notes(query: String, state: State<'_, AppState>) -> Result<Vec<S
         return Ok(vec![]);
     }
 
+    let active_folder = {
+        let app_config = state.app_config.read().expect("app_config read lock");
+        app_config.active_folder.clone().unwrap_or_default()
+    };
+
     // Check if search index is available and use it (scoped to drop lock before await)
     let indexed_result = {
         let index = state.search_index.lock().expect("search index mutex");
         (*index).as_ref().map(|search_index| {
-            search_index.search(&trimmed_query, 20).map_err(|e| e.to_string())
+            search_index.search(&trimmed_query, &active_folder, 20).map_err(|e| e.to_string())
         })
     };
 
@@ -2118,7 +2186,7 @@ async fn search_notes(query: String, state: State<'_, AppState>) -> Result<Vec<S
 async fn fallback_search(query: &str, state: &State<'_, AppState>) -> Result<Vec<SearchResult>, String> {
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone()
+        app_config.active_folder.clone()
     };
 
     let folder = match folder {
@@ -2203,6 +2271,7 @@ fn setup_file_watcher(
 ) -> Result<FileWatcherState, String> {
     let folder_path = PathBuf::from(notes_folder);
     let notes_root = folder_path.clone();
+    let folder_str = notes_folder.to_string();
     let app_handle = app.clone();
 
     let watcher = RecommendedWatcher::new(
@@ -2263,7 +2332,7 @@ fn setup_file_watcher(
                                                 .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
                                                 .map(|d| d.as_secs() as i64)
                                                 .unwrap_or(0);
-                                            let _ = search_index.index_note(&note_id, &title, &content, modified);
+                                            let _ = search_index.index_note(&note_id, &folder_str, &title, &content, modified);
                                         }
                                         Err(_) => {
                                             // File gone between event and read — treat as deletion
@@ -2315,14 +2384,12 @@ fn setup_file_watcher(
 }
 
 #[tauri::command]
-fn start_file_watcher(app: AppHandle, state: State<AppState>) -> Result<(), String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config
-            .notes_folder
-            .clone()
-            .ok_or("Notes folder not set")?
-    };
+fn start_file_watcher(app: AppHandle, state: State<AppState>, folder: String) -> Result<(), String> {
+    // Update the active folder in app config (runtime only, not persisted)
+    {
+        let mut app_config = state.app_config.write().expect("app_config write lock");
+        app_config.active_folder = Some(folder.clone());
+    }
 
     // Clean up debounce map before starting
     cleanup_debounce_map(&state.debounce_map);
@@ -2357,7 +2424,7 @@ async fn save_clipboard_image(
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -2411,7 +2478,7 @@ async fn copy_image_to_assets(
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
-            .notes_folder
+            .active_folder
             .clone()
             .ok_or("Notes folder not set")?
     };
@@ -2472,12 +2539,9 @@ async fn copy_image_to_assets(
 
 #[tauri::command]
 fn rebuild_search_index(state: State<AppState>) -> Result<(), String> {
-    let folder = {
+    let folders = {
         let app_config = state.app_config.read().expect("app_config read lock");
-        app_config
-            .notes_folder
-            .clone()
-            .ok_or("Notes folder not set")?
+        app_config.notes_folders.clone()
     };
 
     let ignored_dirs = {
@@ -2487,9 +2551,14 @@ fn rebuild_search_index(state: State<AppState>) -> Result<(), String> {
 
     let index = state.search_index.lock().expect("search index mutex");
     match index.as_ref() {
-        Some(search_index) => search_index
-            .rebuild_index(&PathBuf::from(&folder), &ignored_dirs)
-            .map_err(|e| e.to_string()),
+        Some(search_index) => {
+            for folder in &folders {
+                search_index
+                    .index_folder(&PathBuf::from(folder), &ignored_dirs)
+                    .map_err(|e| e.to_string())?;
+            }
+            Ok(())
+        }
         None => Err("Search index not initialized".to_string()),
     }
 }
@@ -2729,23 +2798,25 @@ fn try_select_in_notes_folder(app: &AppHandle, path: &Path) -> bool {
         None => return false,
     };
 
-    let notes_folder = state
+    let folders = state
         .app_config
         .read()
         .expect("app_config read lock")
-        .notes_folder
+        .notes_folders
         .clone();
 
-    let folder = match notes_folder {
-        Some(f) => f,
-        None => return false,
+    let canonical_file = match path.canonicalize() {
+        Ok(f) => f,
+        Err(_) => return false,
     };
 
-    let folder_path = PathBuf::from(&folder);
-    let (canonical_file, canonical_folder) = match (path.canonicalize(), folder_path.canonicalize())
-    {
-        (Ok(f), Ok(d)) => (f, d),
-        _ => return false,
+    // Check all registered folders, not just the active one
+    let canonical_folder = folders.iter().find_map(|folder| {
+        PathBuf::from(folder).canonicalize().ok().filter(|d| canonical_file.starts_with(d))
+    });
+    let canonical_folder = match canonical_folder {
+        Some(d) => d,
+        None => return false,
     };
 
     if !canonical_file.starts_with(&canonical_folder) {
@@ -2922,40 +2993,36 @@ pub fn run() {
             let mut app_config = load_app_config(app.handle());
 
             // Normalize legacy/invalid saved paths (e.g. file:// URI from older builds)
-            if let Some(saved_path) = app_config.notes_folder.clone() {
+            let mut changed = false;
+            app_config.notes_folders = app_config.notes_folders.into_iter().filter_map(|saved_path| {
                 match normalize_notes_folder_path(&saved_path) {
                     Ok(normalized) if normalized.is_dir() => {
                         let normalized_str = normalized.to_string_lossy().into_owned();
-                        if normalized_str != saved_path {
-                            app_config.notes_folder = Some(normalized_str);
-                            let _ = save_app_config(app.handle(), &app_config);
-                        }
+                        if normalized_str != saved_path { changed = true; }
+                        Some(normalized_str)
                     }
                     Ok(normalized) => {
-                        // Path is structurally valid but not currently a directory
-                        // (e.g., unmounted drive). Preserve the user's preference.
                         eprintln!("Notes folder not found (may be temporarily unavailable): {:?}", normalized);
+                        Some(saved_path)
                     }
-                    Err(_) => {
-                        app_config.notes_folder = None;
-                        let _ = save_app_config(app.handle(), &app_config);
-                    }
+                    Err(_) => { changed = true; None }
                 }
+            }).collect();
+            if changed {
+                let _ = save_app_config(app.handle(), &app_config);
             }
 
             // Load settings
             let settings = load_settings(app.handle());
 
-            // Initialize search index if notes folder is set
+            // Initialize shared search index and index all folders
             let ignored_dirs = get_effective_ignored_dirs(&settings);
-            let search_index = if let Some(ref folder) = app_config.notes_folder {
-                if let Ok(index_path) = get_search_index_path(app.handle()) {
-                    SearchIndex::new(&index_path).ok().inspect(|idx| {
-                        let _ = idx.rebuild_index(&PathBuf::from(folder), &ignored_dirs);
-                    })
-                } else {
-                    None
-                }
+            let search_index = if let Ok(index_path) = get_search_index_path(app.handle()) {
+                SearchIndex::new(&index_path).ok().inspect(|idx| {
+                    for folder in &app_config.notes_folders {
+                        let _ = idx.index_folder(&PathBuf::from(folder), &ignored_dirs);
+                    }
+                })
             } else {
                 None
             };
@@ -2977,9 +3044,9 @@ pub fn run() {
                 migrate_pinned_paths_to_absolute(app.handle(), &state);
             }
 
-            // Add notes folder to asset protocol scope so images can be served
-            if let Some(ref folder) = app.state::<AppState>().app_config.read().expect("app_config read lock").notes_folder.clone() {
-                let _ = app.asset_protocol_scope().allow_directory(folder, true);
+            // Add all notes folders to asset protocol scope so images can be served
+            for folder in app.state::<AppState>().app_config.read().expect("app_config read lock").notes_folders.clone() {
+                let _ = app.asset_protocol_scope().allow_directory(&folder, true);
             }
 
             // Handle CLI args on first launch; determine whether to show the main window.
@@ -2999,13 +3066,13 @@ pub fn run() {
             };
 
             if let Some(main_window) = app.get_webview_window("main") {
-                let has_notes_folder = app
+                let has_notes_folder = !app
                     .state::<AppState>()
                     .app_config
                     .read()
                     .expect("app_config read lock")
-                    .notes_folder
-                    .is_some();
+                    .notes_folders
+                    .is_empty();
 
                 if opened_preview && has_notes_folder {
                     // Existing user: notes folder is configured and a standalone preview
@@ -3037,8 +3104,9 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
-            get_notes_folder,
-            set_notes_folder,
+            get_notes_folders,
+            add_notes_folder,
+            remove_notes_folder,
             list_notes,
             read_note,
             save_note,

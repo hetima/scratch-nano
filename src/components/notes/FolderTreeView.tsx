@@ -133,7 +133,8 @@ const FileItem = memo(function FileItem({
 
   const handleCopyFilepath = useCallback(async () => {
     try {
-      const folder = await notesService.getNotesFolder();
+      const folders = await notesService.getNotesFolders();
+      const folder = folders[0];
       if (folder) {
         await invoke("copy_to_clipboard", { text: `${folder}/${note.id}.md` });
       }

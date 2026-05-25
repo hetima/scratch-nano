@@ -19,6 +19,7 @@ interface NotesDataContextValue {
   notes: NoteMetadata[];
   selectedNoteId: string | null;
   currentNote: Note | null;
+  notesFolders: string[];
   notesFolder: string | null;
   isLoading: boolean;
   error: string | null;
@@ -40,7 +41,9 @@ interface NotesActionsContextValue {
   duplicateNote: (id: string) => Promise<void>;
   refreshNotes: () => Promise<void>;
   reloadCurrentNote: () => Promise<void>;
-  setNotesFolder: (path: string) => Promise<void>;
+  addNotesFolder: (path: string) => Promise<void>;
+  removeNotesFolder: (path: string) => Promise<void>;
+  switchNotesFolder: (path: string) => Promise<void>;
   syncNotesFolder: (path: string) => Promise<void>;
   search: (query: string) => Promise<void>;
   clearSearch: () => void;
@@ -61,6 +64,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const [notes, setNotes] = useState<NoteMetadata[]>([]);
   const [selectedNoteId, setSelectedNoteId] = useState<string | null>(null);
   const [currentNote, setCurrentNote] = useState<Note | null>(null);
+  const [notesFolders, setNotesFoldersList] = useState<string[]>([]);
   const [notesFolder, setNotesFolderState] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -467,35 +471,77 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     [refreshNotes]
   );
 
-  const setNotesFolder = useCallback(async (path: string) => {
+  const switchNotesFolder = useCallback(async (path: string) => {
     try {
-      await notesService.setNotesFolder(path);
       setNotesFolderState(path);
-      // Start file watcher after setting folder
-      await notesService.startFileWatcher();
+      setSelectedNoteId(null);
+      setCurrentNote(null);
+      setSearchQuery("");
+      setSearchResults([]);
+      await notesService.startFileWatcher(path);
+      const notesList = await notesService.listNotes();
+      setNotes(notesList);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to set notes folder"
+        err instanceof Error ? err.message : "Failed to switch notes folder"
       );
     }
   }, []);
+
+  const addNotesFolder = useCallback(async (path: string) => {
+    try {
+      await notesService.addNotesFolder(path);
+      const folders = await notesService.getNotesFolders();
+      setNotesFoldersList(folders);
+      // Auto-switch to the newly added folder
+      await switchNotesFolder(path);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to add notes folder"
+      );
+    }
+  }, [switchNotesFolder]);
+
+  const removeNotesFolder = useCallback(async (path: string) => {
+    try {
+      await notesService.removeNotesFolder(path);
+      const folders = await notesService.getNotesFolders();
+      setNotesFoldersList(folders);
+      // If we removed the active folder, switch to the first remaining one
+      setNotesFolderState((prev) => {
+        if (prev === path) {
+          const next = folders[0] ?? null;
+          if (next) {
+            switchNotesFolder(next);
+          } else {
+            setSelectedNoteId(null);
+            setCurrentNote(null);
+            setNotes([]);
+          }
+          return next;
+        }
+        return prev;
+      });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to remove notes folder"
+      );
+    }
+  }, [switchNotesFolder]);
 
   // Update local state only (backend already initialized the folder).
   // Used when the CLI sets the notes folder and emits an event.
   const syncNotesFolder = useCallback(async (path: string) => {
     try {
-      setNotesFolderState(path);
-      setSelectedNoteId(null);
-      setCurrentNote(null);
-      const notesList = await notesService.listNotes();
-      setNotes(notesList);
-      await notesService.startFileWatcher();
+      // Add to list if not present
+      setNotesFoldersList((prev) => prev.includes(path) ? prev : [...prev, path]);
+      await switchNotesFolder(path);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to sync notes folder"
       );
     }
-  }, []);
+  }, [switchNotesFolder]);
 
   const search = useCallback(async (query: string) => {
     const requestId = ++searchRequestIdRef.current;
@@ -566,13 +612,14 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function init() {
       try {
-        const folder = await notesService.getNotesFolder();
+        const folders = await notesService.getNotesFolders();
+        setNotesFoldersList(folders);
+        const folder = folders[0] ?? null;
         setNotesFolderState(folder);
         if (folder) {
+          await notesService.startFileWatcher(folder);
           const notesList = await notesService.listNotes();
           setNotes(notesList);
-          // Start file watcher
-          await notesService.startFileWatcher();
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to initialize");
@@ -651,6 +698,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       notes,
       selectedNoteId,
       currentNote,
+      notesFolders,
       notesFolder,
       isLoading,
       error,
@@ -664,6 +712,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       notes,
       selectedNoteId,
       currentNote,
+      notesFolders,
       notesFolder,
       isLoading,
       error,
@@ -687,7 +736,9 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       duplicateNote,
       refreshNotes,
       reloadCurrentNote,
-      setNotesFolder,
+      addNotesFolder,
+      removeNotesFolder,
+      switchNotesFolder,
       syncNotesFolder,
       search,
       clearSearch,
@@ -710,7 +761,9 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       duplicateNote,
       refreshNotes,
       reloadCurrentNote,
-      setNotesFolder,
+      addNotesFolder,
+      removeNotesFolder,
+      switchNotesFolder,
       syncNotesFolder,
       search,
       clearSearch,

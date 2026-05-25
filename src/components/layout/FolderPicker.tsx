@@ -4,7 +4,7 @@ import { useTheme } from "../../context/ThemeContext";
 import { Button } from "../ui";
 
 export function FolderPicker() {
-  const { setNotesFolder } = useNotes();
+  const { addNotesFolder } = useNotes();
   const { reloadSettings } = useTheme();
 
   const handleSelectFolder = async () => {
@@ -16,7 +16,7 @@ export function FolderPicker() {
       });
 
       if (selected && typeof selected === "string") {
-        await setNotesFolder(selected);
+        await addNotesFolder(selected);
         // Reload theme/font settings from the new folder's .scratch-nano/settings.json
         await reloadSettings();
       }

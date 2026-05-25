@@ -10,7 +10,7 @@ import type { Settings } from "../../types/note";
 
 
 export function GeneralSettingsSection() {
-  const { notesFolder, setNotesFolder } = useNotes();
+  const { notesFolders, addNotesFolder } = useNotes();
   const { reloadSettings } = useTheme();
   const [noteTemplate, setNoteTemplate] = useState<string>("Untitled");
   const [previewNoteName, setPreviewNoteName] = useState<string>("Untitled");
@@ -65,14 +65,14 @@ export function GeneralSettingsSection() {
     }
   };
 
-  const handleChangeFolder = async () => {
+  const handleAddFolder = async () => {
     try {
       const selected = await invoke<string | null>("open_folder_dialog", {
-        defaultPath: notesFolder || null,
+        defaultPath: null,
       });
 
       if (selected) {
-        await setNotesFolder(selected);
+        await addNotesFolder(selected);
         // Reload theme/font settings from the new folder's .scratch-nano/settings.json
         await reloadSettings();
       }
@@ -82,68 +82,24 @@ export function GeneralSettingsSection() {
     }
   };
 
-  const handleOpenFolder = async () => {
-    if (!notesFolder) return;
-    try {
-      await invoke("open_in_file_manager", { path: notesFolder });
-    } catch (err) {
-      console.error("Failed to open folder:", err);
-      toast.error("Failed to open folder");
-    }
-  };
-
-  // Format path for display - truncate middle if too long
-  const formatPath = (path: string | null): string => {
-    if (!path) return "Not set";
-    const maxLength = 50;
-    if (path.length <= maxLength) return path;
-
-    // Show start and end of path
-    const start = path.slice(0, 20);
-    const end = path.slice(-25);
-    return `${start}...${end}`;
-  };
-
   return (
     <div className="space-y-8 py-8">
       {/* Folder Location */}
       <section className="pb-2">
         <h2 className="text-xl font-medium mb-0.5">Folder Location</h2>
         <p className="text-sm text-text-muted mb-4">
-          Your notes are stored as markdown files in this folder
+          Your notes are stored as markdown files in these folders
         </p>
-        <div className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-border mb-2.5">
-          <div className="p-2 rounded-md bg-bg-muted">
-            <FolderIcon className="w-4.5 h-4.5 stroke-[1.5] text-text-muted" />
-          </div>
-          <p
-            className="text-sm text-text-muted truncate"
-            title={notesFolder || undefined}
-          >
-            {formatPath(notesFolder)}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button
-            onClick={handleChangeFolder}
-            variant="outline"
-            size="md"
-            className="gap-1.25"
-          >
-            <FoldersIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-            Change Folder
-          </Button>
-          {notesFolder && (
-            <Button
-              onClick={handleOpenFolder}
-              variant="ghost"
-              size="md"
-              className="gap-1.25 text-text"
-            >
-              Open Folder
-            </Button>
-          )}
-        </div>
+        <FolderList folders={notesFolders} />
+        <Button
+          onClick={handleAddFolder}
+          variant="outline"
+          size="md"
+          className="gap-1.25 mt-2.5"
+        >
+          <FoldersIcon className="w-4.5 h-4.5 stroke-[1.5]" />
+          Add Folder
+        </Button>
       </section>
 
       {/* Divider */}
@@ -242,6 +198,57 @@ export function GeneralSettingsSection() {
         </p>
         <IgnoredFoldersEditor />
       </section>
+    </div>
+  );
+}
+
+function FolderList({ folders }: { folders: string[] }) {
+  const { removeNotesFolder } = useNotes();
+
+  if (folders.length === 0) {
+    return (
+      <div className="flex items-center gap-2.5 p-2.5 rounded-[10px] border border-border text-sm text-text-muted">
+        No folders added
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-[10px] border border-border overflow-hidden">
+      {folders.map((folder, i) => (
+        <div
+          key={folder}
+          className={`flex items-center gap-2.5 p-2.5${i > 0 ? " border-t border-border" : ""}`}
+        >
+          <div className="p-2 rounded-md bg-bg-muted shrink-0">
+            <FolderIcon className="w-4.5 h-4.5 stroke-[1.5] text-text-muted" />
+          </div>
+          <p
+            className="text-sm text-text-muted truncate flex-1 min-w-0"
+            title={folder}
+          >
+            {folder}
+          </p>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              onClick={() => invoke("open_in_file_manager", { path: folder })}
+              variant="ghost"
+              size="xs"
+              className="text-text-muted"
+            >
+              Open
+            </Button>
+            <Button
+              onClick={() => removeNotesFolder(folder)}
+              variant="ghost"
+              size="xs"
+              className="text-text-muted hover:text-red-500"
+            >
+              Remove
+            </Button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
