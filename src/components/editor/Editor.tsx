@@ -19,6 +19,7 @@ import { cn } from "../../lib/utils";
 import { plainTextFromMarkdown } from "../../lib/plainText";
 import { Button, IconButton, Tooltip } from "../ui";
 import * as notesService from "../../services/notes";
+import { highlightCode } from '../../lib/highlighter';
 import { downloadPdf, downloadMarkdown } from "../../services/pdf";
 import type { Settings } from "../../types/note";
 import {
@@ -59,12 +60,10 @@ const copyLinkExtension = {
 };
 
 const codeRenderer = {
-  code({ text }: { text: string }) {
-    const escaped = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
-    return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" title="Copy">${COPY_SVG}</button><pre><code>${escaped}</code></pre></div>`;
+  code({ text, lang }: { text: string; lang?: string }) {
+    const highlighted = highlightCode(text, lang);
+    const langClass = lang ? ` class="language-${lang}"` : '';
+    return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" title="Copy">${COPY_SVG}</button><pre><code${langClass}>${highlighted}</code></pre></div>`;
   },
 };
 
