@@ -130,9 +130,8 @@ export function Editor({
   const needsSidebarDelay = focusMode && sidebarVisible;
   const isSidebarActive = sidebarVisible && !focusMode;
 
-  // Reset state when switching notes
+  // Reset state when switching notes (keep source mode, discard unsaved edits)
   useEffect(() => {
-    setSourceMode(false);
     setIsDirty(false);
     setLiveContent(null);
   }, [currentNote?.id]);

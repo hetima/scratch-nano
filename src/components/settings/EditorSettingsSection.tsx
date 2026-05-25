@@ -11,7 +11,7 @@ import type {
 import { ChevronRightIcon, EyeIcon, MinusIcon, PlusIcon } from "../icons";
 import { cn } from "../../lib/utils";
 import { getSystemFonts } from "tauri-plugin-system-fonts-api";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 
 // Human-readable labels for theme color keys, grouped logically
 const colorLabels: { key: ThemeColorKey; label: string; group: string }[] = [
@@ -51,6 +51,49 @@ const boldWeightOptions = [
   { value: 700, label: "Bold", excludeForMonospace: false },
   { value: 800, label: "Extra Bold", excludeForMonospace: false },
 ];
+
+/** Numeric input that defers validation to blur, allowing free-form editing in between. */
+function DeferredNumericInput({
+  value,
+  min,
+  max,
+  step,
+  onBlur,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  onBlur: (raw: string) => void;
+}) {
+  const [draft, setDraft] = useState(String(value));
+  const [focused, setFocused] = useState(false);
+
+  // Sync draft when the upstream value changes (e.g. after clamp) and field is not focused
+  useEffect(() => {
+    if (!focused) setDraft(String(value));
+  }, [value, focused]);
+
+  return (
+    <Input
+      type="number"
+      min={min}
+      max={max}
+      step={step}
+      value={focused ? draft : value}
+      onChange={(e) => setDraft(e.target.value)}
+      onFocus={() => {
+        setFocused(true);
+        setDraft(String(value));
+      }}
+      onBlur={() => {
+        setFocused(false);
+        onBlur(draft);
+      }}
+      className="w-full h-9 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+    />
+  );
+}
 
 export function AppearanceSettingsSection() {
   const [systemFonts, setSystemFonts] = useState<string[]>([]);
@@ -106,18 +149,16 @@ export function AppearanceSettingsSection() {
     return [...builtin, ...system];
   }, [systemFonts, editorFontSettings.baseFontFamily]);
 
-  // Validated numeric change handler
-  const handleNumericChange = (
-    field: "baseFontSize" | "lineHeight",
-    value: string,
-    min: number,
-    max: number,
-  ) => {
-    const parsed = parseFloat(value);
-    if (!Number.isFinite(parsed)) return;
-    const clamped = Math.min(Math.max(parsed, min), max);
-    setEditorFontSetting(field, clamped);
-  };
+  // Numeric input blur handler — validates and saves only when editing is done
+  const handleNumericBlur = useCallback(
+    (field: "baseFontSize" | "lineHeight", min: number, max: number, raw: string) => {
+      const parsed = parseFloat(raw);
+      if (!Number.isFinite(parsed)) return; // revert via controlled value
+      const clamped = Math.min(Math.max(parsed, min), max);
+      setEditorFontSetting(field, clamped);
+    },
+    [setEditorFontSetting],
+  );
 
   // Check if settings differ from defaults
   const hasCustomFonts =
@@ -234,15 +275,11 @@ export function AppearanceSettingsSection() {
           <div className="flex items-center justify-between">
             <label className="text-sm text-text font-medium">Size</label>
             <div className="relative w-40">
-              <Input
-                type="number"
-                min="12"
-                max="24"
+              <DeferredNumericInput
                 value={editorFontSettings.baseFontSize}
-                onChange={(e) =>
-                  handleNumericChange("baseFontSize", e.target.value, 12, 24)
-                }
-                className="w-full h-9 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                min={12}
+                max={24}
+                onBlur={(raw) => handleNumericBlur("baseFontSize", 12, 24, raw)}
               />
             </div>
           </div>
@@ -269,16 +306,12 @@ export function AppearanceSettingsSection() {
           <div className="flex items-center justify-between">
             <label className="text-sm text-text font-medium">Line Height</label>
             <div className="relative w-40">
-              <Input
-                type="number"
-                min="1.0"
-                max="2.5"
-                step="0.1"
+              <DeferredNumericInput
                 value={editorFontSettings.lineHeight}
-                onChange={(e) =>
-                  handleNumericChange("lineHeight", e.target.value, 1.0, 2.5)
-                }
-                className="w-full h-9 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                min={1.0}
+                max={2.5}
+                step={0.1}
+                onBlur={(raw) => handleNumericBlur("lineHeight", 1.0, 2.5, raw)}
               />
             </div>
           </div>
