@@ -52,6 +52,10 @@ const defaultEditorFontSettings: Required<EditorFontSettings> = {
   baseFontSize: 15,
   boldWeight: 600,
   lineHeight: 1.6,
+  editFontFamily: "system-sans",
+  editFontSize: 15,
+  editLineHeight: 1.6,
+  codeFontFamily: "monospace",
 };
 
 // Default theme colors (must match App.css :root / .dark values)
@@ -163,6 +167,10 @@ function applyFontCSSVariables(fonts: Required<EditorFontSettings>) {
 
   // Fixed value for paragraph spacing
   root.style.setProperty("--editor-paragraph-spacing", "0.875em");
+
+  // Code font (inline code + code blocks)
+  const codeFontFamily = getFontFamilyValue(fonts.codeFontFamily);
+  root.style.setProperty("--editor-code-font-family", codeFontFamily);
 }
 
 // Apply editor layout width CSS variables

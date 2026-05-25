@@ -1,4 +1,4 @@
-import { useTheme, defaultThemeColors } from "../../context/ThemeContext";
+import { useTheme, defaultThemeColors, getFontFamilyValue } from "../../context/ThemeContext";
 import { Button, CodeCopyButton, IconButton, Input, Select } from "../ui";
 import { Combobox } from "../ui/Combobox";
 import { ColorPicker } from "../ui/ColorPicker";
@@ -151,7 +151,7 @@ export function AppearanceSettingsSection() {
 
   // Numeric input blur handler — validates and saves only when editing is done
   const handleNumericBlur = useCallback(
-    (field: "baseFontSize" | "lineHeight", min: number, max: number, raw: string) => {
+    (field: "baseFontSize" | "lineHeight" | "editFontSize" | "editLineHeight", min: number, max: number, raw: string) => {
       const parsed = parseFloat(raw);
       if (!Number.isFinite(parsed)) return; // revert via controlled value
       const clamped = Math.min(Math.max(parsed, min), max);
@@ -160,12 +160,16 @@ export function AppearanceSettingsSection() {
     [setEditorFontSetting],
   );
 
-  // Check if settings differ from defaults
-  const hasCustomFonts =
+  // Check if any appearance settings differ from defaults
+  const hasCustomAppearance =
     editorFontSettings.baseFontFamily !== "system-sans" ||
     editorFontSettings.baseFontSize !== 15 ||
     editorFontSettings.boldWeight !== 600 ||
     editorFontSettings.lineHeight !== 1.6 ||
+    editorFontSettings.editFontFamily !== "system-sans" ||
+    editorFontSettings.editFontSize !== 15 ||
+    editorFontSettings.editLineHeight !== 1.6 ||
+    editorFontSettings.codeFontFamily !== "monospace" ||
     textDirection !== "auto" ||
     editorWidth !== "normal" ||
     Math.round(interfaceZoom * 100) !== 100;
@@ -247,72 +251,37 @@ export function AppearanceSettingsSection() {
       {/* Divider */}
       <div className="border-t border-border border-dashed" />
 
-      {/* Typography Section */}
+      {/* Layout Section */}
       <section>
-        <div className="flex items-baseline justify-between mb-3">
-          <h2 className="text-xl font-medium">Typography</h2>
-          {hasCustomFonts && (
-            <Button onClick={resetEditorFontSettings} variant="ghost" size="sm">
-              Reset to defaults
-            </Button>
-          )}
-        </div>
-
+        <h2 className="text-xl font-medium mb-3">Layout</h2>
         <div className="rounded-[10px] border border-border pl-4 py-3 pr-3 space-y-2">
-          {/* Font Family */}
+          {/* Interface Zoom */}
           <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium">Font</label>
-            <Combobox
-              value={editorFontSettings.baseFontFamily}
-              onChange={(v) => handleFontFamilyChange(v as FontFamily)}
-              options={fontOptions}
-              className="w-60"
-              placeholder="Search fonts..."
-            />
-          </div>
-
-          {/* Base Font Size */}
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium">Size</label>
-            <div className="relative w-40">
-              <DeferredNumericInput
-                value={editorFontSettings.baseFontSize}
-                min={12}
-                max={24}
-                onBlur={(raw) => handleNumericBlur("baseFontSize", 12, 24, raw)}
-              />
-            </div>
-          </div>
-
-          {/* Bold Weight */}
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium">Bold Weight</label>
-            <Select
-              value={editorFontSettings.boldWeight}
-              onChange={(e) =>
-                setEditorFontSetting("boldWeight", Number(e.target.value))
-              }
-              className="w-60"
-            >
-              {availableWeightOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </Select>
-          </div>
-
-          {/* Line Height */}
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium">Line Height</label>
-            <div className="relative w-40">
-              <DeferredNumericInput
-                value={editorFontSettings.lineHeight}
-                min={1.0}
-                max={2.5}
-                step={0.1}
-                onBlur={(raw) => handleNumericBlur("lineHeight", 1.0, 2.5, raw)}
-              />
+            <label className="text-sm text-text font-medium">
+              Interface Zoom
+            </label>
+            <div className="flex items-center gap-1 w-40">
+              <IconButton
+                variant="outline"
+                size="md"
+                onClick={() => setInterfaceZoom((prev) => prev - 0.05)}
+                disabled={interfaceZoom <= 0.7}
+                title="Zoom out"
+              >
+                <MinusIcon className="w-4 h-4" />
+              </IconButton>
+              <span className="text-sm font-medium tabular-nums flex-1 text-center">
+                {Math.round(interfaceZoom * 100)}%
+              </span>
+              <IconButton
+                variant="outline"
+                size="md"
+                onClick={() => setInterfaceZoom((prev) => prev + 0.05)}
+                disabled={interfaceZoom >= 1.5}
+                title="Zoom in"
+              >
+                <PlusIcon className="w-4 h-4" />
+              </IconButton>
             </div>
           </div>
 
@@ -378,33 +347,89 @@ export function AppearanceSettingsSection() {
             </div>
           )}
 
-          {/* Interface Zoom */}
+          {/* Code Font */}
           <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium">
-              Interface Zoom
-            </label>
-            <div className="flex items-center gap-1 w-40">
-              <IconButton
-                variant="outline"
-                size="md"
-                onClick={() => setInterfaceZoom((prev) => prev - 0.05)}
-                disabled={interfaceZoom <= 0.7}
-                title="Zoom out"
-              >
-                <MinusIcon className="w-4 h-4" />
-              </IconButton>
-              <span className="text-sm font-medium tabular-nums flex-1 text-center">
-                {Math.round(interfaceZoom * 100)}%
-              </span>
-              <IconButton
-                variant="outline"
-                size="md"
-                onClick={() => setInterfaceZoom((prev) => prev + 0.05)}
-                disabled={interfaceZoom >= 1.5}
-                title="Zoom in"
-              >
-                <PlusIcon className="w-4 h-4" />
-              </IconButton>
+            <label className="text-sm text-text font-medium">Code Font</label>
+            <Combobox
+              value={editorFontSettings.codeFontFamily}
+              onChange={(v) => setEditorFontSetting("codeFontFamily", v as FontFamily)}
+              options={fontOptions}
+              className="w-60"
+              placeholder="Search fonts..."
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="border-t border-border border-dashed" />
+
+      {/* Preview Section */}
+      <section>
+        <div className="flex items-baseline justify-between mb-3">
+          <h2 className="text-xl font-medium">Preview</h2>
+          {hasCustomAppearance && (
+            <Button onClick={resetEditorFontSettings} variant="ghost" size="sm">
+              Reset to defaults
+            </Button>
+          )}
+        </div>
+
+        <div className="rounded-[10px] border border-border pl-4 py-3 pr-3 space-y-2">
+          {/* Font Family */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Font</label>
+            <Combobox
+              value={editorFontSettings.baseFontFamily}
+              onChange={(v) => handleFontFamilyChange(v as FontFamily)}
+              options={fontOptions}
+              className="w-60"
+              placeholder="Search fonts..."
+            />
+          </div>
+
+          {/* Base Font Size */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Size</label>
+            <div className="relative w-40">
+              <DeferredNumericInput
+                value={editorFontSettings.baseFontSize}
+                min={12}
+                max={24}
+                onBlur={(raw) => handleNumericBlur("baseFontSize", 12, 24, raw)}
+              />
+            </div>
+          </div>
+
+          {/* Bold Weight */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Bold Weight</label>
+            <Select
+              value={editorFontSettings.boldWeight}
+              onChange={(e) =>
+                setEditorFontSetting("boldWeight", Number(e.target.value))
+              }
+              className="w-60"
+            >
+              {availableWeightOptions.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {/* Line Height */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Line Height</label>
+            <div className="relative w-40">
+              <DeferredNumericInput
+                value={editorFontSettings.lineHeight}
+                min={1.0}
+                max={2.5}
+                step={0.1}
+                onBlur={(raw) => handleNumericBlur("lineHeight", 1.0, 2.5, raw)}
+              />
             </div>
           </div>
         </div>
@@ -420,19 +445,7 @@ export function AppearanceSettingsSection() {
               className="prose prose-lg dark:prose-invert max-w-xl mx-auto"
               dir={textDirection}
               style={{
-                fontFamily: (() => {
-                  const family = editorFontSettings.baseFontFamily;
-                  if (family === "system-sans") {
-                    return "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
-                  } else if (family === "serif") {
-                    return "ui-serif, Georgia, Cambria, 'Times New Roman', Times, serif";
-                  } else if (family === "monospace") {
-                    return "ui-monospace, 'Cascadia Code', 'Source Code Pro', Menlo, Consolas, 'DejaVu Sans Mono', monospace";
-                  } else {
-                    // Use system font name directly
-                    return family;
-                  }
-                })(),
+                fontFamily: getFontFamilyValue(editorFontSettings.baseFontFamily),
                 fontSize: `${editorFontSettings.baseFontSize}px`,
               }}
             >
@@ -484,7 +497,10 @@ export function AppearanceSettingsSection() {
 }`}
                   />
                 </div>
-                <pre className="pt-10">
+                <pre
+                  className="pt-10"
+                  style={{ fontFamily: getFontFamilyValue(editorFontSettings.codeFontFamily) }}
+                >
                   <code>
                     {`function acquireFood() {
   while (bowl.isEmpty()) {
@@ -517,6 +533,54 @@ export function AppearanceSettingsSection() {
           </div>
           {/* Fade overlay - content to muted background */}
           <div className="absolute bottom-0 left-0 right-0 h-40 bg-linear-to-t from-bg to-transparent pointer-events-none" />
+        </div>
+      </section>
+
+      {/* Divider */}
+      <div className="border-t border-border border-dashed" />
+
+      {/* Edit Section */}
+      <section>
+        <h2 className="text-xl font-medium mb-3">Edit</h2>
+        <div className="rounded-[10px] border border-border pl-4 py-3 pr-3 space-y-2">
+          {/* Edit Font Family */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Font</label>
+            <Combobox
+              value={editorFontSettings.editFontFamily}
+              onChange={(v) => setEditorFontSetting("editFontFamily", v as FontFamily)}
+              options={fontOptions}
+              className="w-60"
+              placeholder="Search fonts..."
+            />
+          </div>
+
+          {/* Edit Font Size */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Size</label>
+            <div className="relative w-40">
+              <DeferredNumericInput
+                value={editorFontSettings.editFontSize}
+                min={12}
+                max={24}
+                onBlur={(raw) => handleNumericBlur("editFontSize", 12, 24, raw)}
+              />
+            </div>
+          </div>
+
+          {/* Edit Line Height */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Line Height</label>
+            <div className="relative w-40">
+              <DeferredNumericInput
+                value={editorFontSettings.editLineHeight}
+                min={1.0}
+                max={2.5}
+                step={0.1}
+                onBlur={(raw) => handleNumericBlur("editLineHeight", 1.0, 2.5, raw)}
+              />
+            </div>
+          </div>
         </div>
       </section>
     </div>

@@ -23,9 +23,15 @@ export type EditorWidth = "narrow" | "normal" | "wide" | "full" | "custom";
 
 export interface EditorFontSettings {
   baseFontFamily?: FontFamily;
-  baseFontSize?: number; // in px, default 16
+  baseFontSize?: number; // in px, default 15
   boldWeight?: number; // 600, 700, 800 for headings and bold text
   lineHeight?: number; // default 1.6
+  // Edit mode (CodeMirror) font settings
+  editFontFamily?: FontFamily;
+  editFontSize?: number; // in px, default 15
+  editLineHeight?: number; // default 1.6
+  // Code font (inline code + code blocks)
+  codeFontFamily?: FontFamily;
 }
 
 // Customizable theme color keys (maps to CSS --color-* variables)

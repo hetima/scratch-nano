@@ -663,9 +663,10 @@ export function Editor({
                   setLiveContent(newContent);
                   setIsDirty(true);
                 }}
-                fontFamily={getFontFamilyValue(fonts.baseFontFamily)}
-                fontSize={fonts.baseFontSize}
-                lineHeight={fonts.lineHeight}
+                fontFamily={getFontFamilyValue(fonts.editFontFamily)}
+                fontSize={fonts.editFontSize}
+                lineHeight={fonts.editLineHeight}
+                codeFontFamily={getFontFamilyValue(fonts.codeFontFamily)}
                 textDirection={textDirection}
                 isDark={isDark}
               />

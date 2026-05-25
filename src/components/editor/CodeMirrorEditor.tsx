@@ -11,11 +11,12 @@ interface CodeMirrorEditorProps {
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
+  codeFontFamily: string;
   textDirection: "ltr" | "rtl" | "auto";
   isDark: boolean;
 }
 
-function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, isDark: boolean) {
+function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, codeFontFamily: string, isDark: boolean) {
   return EditorView.theme(
     {
       "&": {
@@ -73,8 +74,7 @@ function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, is
       ".cm-strikethrough": { textDecoration: "line-through" },
       ".cm-comment": { color: "var(--color-text-muted)" },
       ".cm-monospace": {
-        fontFamily:
-          "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, monospace",
+        fontFamily: codeFontFamily,
         fontSize: "0.9em",
       },
     },
@@ -89,6 +89,7 @@ export function CodeMirrorEditor({
   fontFamily,
   fontSize,
   lineHeight,
+  codeFontFamily,
   textDirection,
   isDark,
 }: CodeMirrorEditorProps) {
@@ -130,7 +131,7 @@ export function CodeMirrorEditor({
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         saveKeymap,
-        themeCompartment.current.of(buildTheme(fontFamily, fontSize, lineHeight, isDark)),
+        themeCompartment.current.of(buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark)),
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
@@ -174,10 +175,10 @@ export function CodeMirrorEditor({
     if (!view) return;
     view.dispatch({
       effects: themeCompartment.current.reconfigure(
-        buildTheme(fontFamily, fontSize, lineHeight, isDark),
+        buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark),
       ),
     });
-  }, [fontFamily, fontSize, lineHeight, isDark]);
+  }, [fontFamily, fontSize, lineHeight, codeFontFamily, isDark]);
 
   return (
     <div
