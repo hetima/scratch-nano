@@ -134,7 +134,7 @@ const FileItem = memo(function FileItem({
       const folders = await notesService.getNotesFolders();
       const folder = folders[0];
       if (folder) {
-        await invoke("copy_to_clipboard", { text: `${folder}/${note.id}.md` });
+        await invoke("copy_to_clipboard", { text: `${folder}/${note.id}.md`.replace(/\\/g, "/") });
       }
     } catch (error) {
       console.error("Failed to copy filepath:", error);

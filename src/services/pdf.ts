@@ -18,18 +18,18 @@ export async function downloadPdf(
  * Downloads the markdown content as a .md file.
  *
  * @param markdown - The markdown content to save
- * @param noteTitle - The note title for the default filename
+ * @param noteId - The note ID (relative path without extension) for the default filename
  * @returns Promise<boolean> - Returns true if file was saved successfully, false if user cancelled
  */
 export async function downloadMarkdown(
   markdown: string,
-  noteTitle: string
+  noteId: string
 ): Promise<boolean> {
-  const sanitizedTitle = sanitizeFilename(noteTitle);
-
-  // Show native save dialog
+  const stem = noteId.includes("/")
+    ? noteId.substring(noteId.lastIndexOf("/") + 1)
+    : noteId;
   const filePath = await save({
-    defaultPath: `${sanitizedTitle}.md`,
+    defaultPath: `${stem}.md`,
     filters: [{ name: "Markdown", extensions: ["md"] }],
   });
 
@@ -46,13 +46,3 @@ export async function downloadMarkdown(
   return true;
 }
 
-/**
- * Sanitizes a filename by removing invalid characters.
- * Replaces filesystem-unsafe characters with dashes.
- *
- * @param name - The filename to sanitize
- * @returns A filesystem-safe filename
- */
-function sanitizeFilename(name: string): string {
-  return name.replace(/[/\\?%*:|"<>]/g, "-").trim() || "note";
-}

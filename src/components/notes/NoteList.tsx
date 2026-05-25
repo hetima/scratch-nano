@@ -114,7 +114,7 @@ const NoteItemWithMenu = memo(function NoteItemWithMenu({
       const folders = await notesService.getNotesFolders();
       const folder = folders[0];
       if (folder) {
-        const filepath = `${folder}/${id}.md`;
+        const filepath = `${folder}/${id}.md`.replace(/\\/g, "/");
         await invoke("copy_to_clipboard", { text: filepath });
       }
     } catch (error) {

@@ -489,12 +489,13 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addNotesFolder = useCallback(async (path: string) => {
+    const normalizedPath = path.replace(/\\/g, "/");
     try {
-      await notesService.addNotesFolder(path);
+      await notesService.addNotesFolder(normalizedPath);
       const folders = await notesService.getNotesFolders();
       setNotesFoldersList(folders);
       // Auto-switch to the newly added folder
-      await switchNotesFolder(path);
+      await switchNotesFolder(normalizedPath);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to add notes folder"

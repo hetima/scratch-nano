@@ -257,7 +257,7 @@ export function Editor({
   const handleDownloadMarkdown = useCallback(async () => {
     if (!currentNote) return;
     try {
-      const saved = await downloadMarkdown(currentNote.content, currentNote.title);
+      const saved = await downloadMarkdown(currentNote.content, currentNote.id);
       if (saved) {
         toast.success("Markdown saved successfully");
       }
@@ -282,21 +282,6 @@ export function Editor({
   // Keyboard shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Cmd+U / Ctrl+U to toggle source mode
-      if (
-        (e.metaKey || e.ctrlKey) &&
-        !e.shiftKey &&
-        e.key.toLowerCase() === "u"
-      ) {
-        if (!currentNote) return;
-        const target = e.target as HTMLElement;
-        if (target.tagName.toLowerCase() === "input") return;
-        if (target.closest('[class*="sidebar"]')) return;
-        e.preventDefault();
-        toggleSourceMode();
-        return;
-      }
-
       // Cmd+F / Ctrl+F — delegate to browser find
       if (
         (e.metaKey || e.ctrlKey) &&
@@ -317,7 +302,7 @@ export function Editor({
     };
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [currentNote, toggleSourceMode]);
+  }, [currentNote]);
 
   // Keyboard shortcut for Cmd+Shift+C to open copy menu
   useEffect(() => {
@@ -339,18 +324,17 @@ export function Editor({
     const handleClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       const link = target.closest("a");
-      if (link && (e.metaKey || e.ctrlKey)) {
+      if (!link) return;
+      const rawHref = link.getAttribute("href") ?? "";
+      if (
+        rawHref.startsWith("http:") ||
+        rawHref.startsWith("https:") ||
+        rawHref.startsWith("mailto:")
+      ) {
         e.preventDefault();
-        const rawHref = link.getAttribute("href") ?? "";
-        if (
-          rawHref.startsWith("http:") ||
-          rawHref.startsWith("https:") ||
-          rawHref.startsWith("mailto:")
-        ) {
-          openUrl(rawHref).catch((error) =>
-            console.error("Failed to open link:", error),
-          );
-        }
+        openUrl(rawHref).catch((error) =>
+          console.error("Failed to open link:", error),
+        );
       }
     };
 
@@ -554,8 +538,8 @@ export function Editor({
             <Tooltip
               content={
                 sourceMode
-                  ? `View Formatted (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}M)`
-                  : `View Markdown Source (${mod}${isMac ? "" : "+"}${shift}${isMac ? "" : "+"}M)`
+                  ? `View Formatted (${mod}+U)`
+                  : `View Markdown Source (${mod}+U)`
               }
             >
               <IconButton onClick={toggleSourceMode}>
@@ -697,7 +681,7 @@ export function Editor({
           {sourceMode && (
             <div className="absolute inset-0" dir={textDirection}>
               <CodeMirrorEditor
-                content={currentNote.content}
+                content={liveContent ?? currentNote.content}
                 onSave={(newContent) => {
                   if (saveNote) {
                     saveNote(newContent, currentNote.id);

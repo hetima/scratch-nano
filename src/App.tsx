@@ -164,11 +164,11 @@ function AppContent() {
         return;
       }
 
-      // Cmd+Shift+M - Toggle markdown source mode
+      // Cmd+U / Ctrl+U - Toggle markdown source mode
       if (
         (e.metaKey || e.ctrlKey) &&
-        e.shiftKey &&
-        e.key.toLowerCase() === "m"
+        !e.shiftKey &&
+        e.key.toLowerCase() === "u"
       ) {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("toggle-source-mode"));

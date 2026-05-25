@@ -251,7 +251,7 @@ export function CommandPalette({
                 toast.error("No note selected");
                 return;
               }
-              const saved = await downloadMarkdown(currentNote.content, currentNote.title);
+              const saved = await downloadMarkdown(currentNote.content, currentNote.id);
               if (saved) {
                 toast.success("Markdown saved successfully");
                 onClose();
