@@ -35,8 +35,23 @@ import {
   FolderPlusIcon,
 } from "../icons";
 
-// Configure marked instance with GFM support
-const marked = new Marked({ gfm: true, breaks: true });
+// Configure marked instance with GFM support + code block copy button
+const COPY_SVG = '<svg class="code-copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/></svg>';
+const CHECK_SVG = '<svg class="code-copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10"/></svg>';
+
+const marked = new Marked({
+  gfm: true,
+  breaks: true,
+  renderer: {
+    code({ text }: { text: string }) {
+      const escaped = text
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+      return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" title="Copy">${COPY_SVG}</button><pre><code>${escaped}</code></pre></div>`;
+    },
+  },
+});
 
 function formatDateTime(timestamp: number): string {
   const date = new Date(timestamp * 1000);
@@ -645,6 +660,22 @@ export function Editor({
                 lineHeight: "var(--editor-line-height)",
               }}
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
+              onClick={(e) => {
+                const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".code-copy-btn");
+                if (!btn) return;
+                const code = btn.parentElement?.querySelector("code");
+                if (!code) return;
+                invoke("copy_to_clipboard", { text: code.textContent ?? "" })
+                  .then(() => {
+                    btn.classList.add("copied");
+                    btn.innerHTML = CHECK_SVG;
+                    setTimeout(() => {
+                      btn.classList.remove("copied");
+                      btn.innerHTML = COPY_SVG;
+                    }, 1500);
+                  })
+                  .catch((err) => console.error("Failed to copy:", err));
+              }}
             />
           )}
           {/* Source mode — CodeMirror editor */}
