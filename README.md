@@ -10,12 +10,17 @@ A super minimal, offline-first markdown note-taking app for macOS, Windows, and 
 
 - **Offline-first** - No cloud, no account, no internet required
 - **Markdown-based** - Notes stored as plain `.md` files you own
-- **Preview mode** - Open any `.md` file via drag-and-drop or "Open With" without a notes folder
+- **Preview mode** - Preview `.md` file
 - **Markdown source mode** - Toggle to view and edit raw markdown (`Cmd+U`)
 - **Syntax highlighting** - 20 languages with GitHub-inspired color scheme
 - **Mermaid diagrams** - Render flowcharts, sequence diagrams, and more in fenced code blocks
 - **Focus mode** - Distraction-free writing with animated sidebar/toolbar fade (`Cmd+Shift+Enter`)
 - **Folders** - Opt-in collapsible folder tree with drag-and-drop to organize notes
+- **Multiple folders** - Manage notes across multiple root folders with a quick-switch menu
+- **Full-text search** - Fast search powered by Tantivy; create a new note by name directly from the search field
+- **Pin notes** - Pin frequently used notes to the top of the list
+- **Code copy button** - One-click copy button on fenced code blocks
+- **Auto-save** - Notes are saved automatically when switching between them
 - **Customizable** - Theme, typography, page width, and RTL text direction
 - **Lightweight** - 5-10x smaller than Obsidian or Notion
 
@@ -80,12 +85,8 @@ Scratch is designed to be usable without a mouse. Here are the essentials to get
 
 Many more shortcuts and features are available in the app—explore via the command palette (`Cmd+P` / `Ctrl+P`) or view the full reference in Settings → Shortcuts.
 
-## Built With
-
-[Tauri](https://tauri.app/) · [React](https://react.dev/) · [TipTap](https://tiptap.dev/) · [Tailwind CSS](https://tailwindcss.com/) · [Tantivy](https://github.com/quickwit-oss/tantivy)
-
-Forked from: [erictli/scratch: A minimalist, offline-first markdown note-taking app](https://github.com/erictli/scratch)
-
 ## License
+
+Forked from: [erictli/scratch](https://github.com/erictli/scratch)
 
 MIT
