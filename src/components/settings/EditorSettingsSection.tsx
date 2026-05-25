@@ -133,6 +133,8 @@ export function AppearanceSettingsSection() {
     setShowLineNumbers,
     wrapCodeBlocks,
     setWrapCodeBlocks,
+    copyLinks,
+    setCopyLinks,
   } = useTheme();
 
   // Build font options for combobox
@@ -447,6 +449,20 @@ export function AppearanceSettingsSection() {
               type="checkbox"
               checked={wrapCodeBlocks}
               onChange={(e) => setWrapCodeBlocks(e.target.checked)}
+              className="w-4 h-4 accent-accent cursor-pointer"
+            />
+          </div>
+
+          {/* copy: Links */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium" htmlFor="copy-links">
+              copy: Links
+            </label>
+            <input
+              id="copy-links"
+              type="checkbox"
+              checked={copyLinks}
+              onChange={(e) => setCopyLinks(e.target.checked)}
               className="w-4 h-4 accent-accent cursor-pointer"
             />
           </div>

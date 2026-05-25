@@ -479,6 +479,18 @@ html.dark {
   height: 1rem;
 }
 
+/* copy: inline links */
+.markdown-preview .copy-link {
+  cursor: pointer;
+  border-bottom-style: dashed;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+
+.markdown-preview .copy-link:hover {
+  color: var(--color-text);
+}
+
 /* Language selector (legacy CodeBlockView) */
 .code-block-language-selector {
   position: absolute;

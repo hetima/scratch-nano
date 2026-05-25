@@ -70,6 +70,7 @@ export interface Settings {
   customColorsDark?: CustomColors;
   showLineNumbers?: boolean;
   wrapCodeBlocks?: boolean;
+  copyLinks?: boolean;
 }
 
 export interface FolderNode {

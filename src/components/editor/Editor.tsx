@@ -39,19 +39,43 @@ import {
 const COPY_SVG = '<svg class="code-copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/></svg>';
 const CHECK_SVG = '<svg class="code-copy-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10"/></svg>';
 
-const marked = new Marked({
-  gfm: true,
-  breaks: true,
-  renderer: {
-    code({ text }: { text: string }) {
-      const escaped = text
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;");
-      return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" title="Copy">${COPY_SVG}</button><pre><code>${escaped}</code></pre></div>`;
-    },
+// copy:xxxx / copy:[xxxx] / copy:"xxxx" inline extension
+const copyLinkExtension = {
+  name: "copyLink",
+  level: "inline" as const,
+  start(src: string) { return src.indexOf("copy:"); },
+  tokenizer(src: string) {
+    const bracketMatch = /^copy:\[([^\]]*)\]/.exec(src);
+    if (bracketMatch) return { type: "copyLink", raw: bracketMatch[0], text: bracketMatch[1] };
+    const quoteMatch = /^copy:"([^"]*)"/.exec(src);
+    if (quoteMatch) return { type: "copyLink", raw: quoteMatch[0], text: quoteMatch[1] };
+    const plainMatch = /^copy:(\S+)/.exec(src);
+    if (plainMatch) return { type: "copyLink", raw: plainMatch[0], text: plainMatch[1] };
   },
-});
+  renderer(token: { text: string; raw: string }) {
+    const escaped = token.text.replace(/"/g, "&quot;");
+    return `<a href="#" class="copy-link" data-copy="${escaped}">${token.raw}</a>`;
+  },
+};
+
+const codeRenderer = {
+  code({ text }: { text: string }) {
+    const escaped = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+    return `<div class="code-block-wrapper"><button class="code-copy-btn" type="button" title="Copy">${COPY_SVG}</button><pre><code>${escaped}</code></pre></div>`;
+  },
+};
+
+function createMarked(withCopyLinks: boolean) {
+  return new Marked({
+    gfm: true,
+    breaks: true,
+    extensions: withCopyLinks ? [copyLinkExtension] : [],
+    renderer: codeRenderer,
+  });
+}
 
 function formatDateTime(timestamp: number): string {
   const date = new Date(timestamp * 1000);
@@ -119,7 +143,7 @@ export function Editor({
   const pinNote = notesCtx?.pinNote;
   const unpinNote = notesCtx?.unpinNote;
   const notes = notesCtx?.notes;
-  const { textDirection, resolvedTheme, editorFontSettings: fonts, showLineNumbers } = useTheme();
+  const { textDirection, resolvedTheme, editorFontSettings: fonts, showLineNumbers, copyLinks } = useTheme();
   const isDark = resolvedTheme === "dark";
 
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
@@ -194,12 +218,14 @@ export function Editor({
 
   const isPinned = notesCtx?.notes.find(n => n.id === currentNote?.id)?.isPinned ?? false;
 
+  const markedInstance = useMemo(() => createMarked(copyLinks), [copyLinks]);
+
   // Render markdown to HTML — uses liveContent in source mode for real-time preview
   const displayContent = liveContent ?? currentNote?.content;
   const renderedHtml = useMemo(() => {
     if (!displayContent) return "";
-    return marked.parse(displayContent) as string;
-  }, [displayContent]);
+    return markedInstance.parse(displayContent) as string;
+  }, [displayContent, markedInstance]);
 
   // Copy handlers — use currentNote.content directly (no live editor state)
   const handleCopyMarkdown = useCallback(async () => {
@@ -228,7 +254,7 @@ export function Editor({
   const handleCopyHtml = useCallback(async () => {
     if (!currentNote) return;
     try {
-      const html = await marked.parse(currentNote.content);
+      const html = await markedInstance.parse(currentNote.content);
       await invoke("copy_to_clipboard", { text: html as string });
       toast.success("Copied as HTML");
     } catch (error) {
@@ -660,6 +686,14 @@ export function Editor({
               }}
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
               onClick={(e) => {
+                const link = (e.target as HTMLElement).closest<HTMLAnchorElement>(".copy-link");
+                if (link) {
+                  e.preventDefault();
+                  invoke("copy_to_clipboard", { text: link.dataset.copy ?? "" })
+                    .then(() => toast.success("Copied"))
+                    .catch((err) => console.error("Failed to copy:", err));
+                  return;
+                }
                 const btn = (e.target as HTMLElement).closest<HTMLButtonElement>(".code-copy-btn");
                 if (!btn) return;
                 const code = btn.parentElement?.querySelector("code");

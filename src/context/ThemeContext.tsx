@@ -131,6 +131,8 @@ interface ThemeContextType {
   setShowLineNumbers: (value: boolean) => void;
   wrapCodeBlocks: boolean;
   setWrapCodeBlocks: (value: boolean) => void;
+  copyLinks: boolean;
+  setCopyLinks: (value: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -209,6 +211,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const [customColorsDark, setCustomColorsDarkState] = useState<CustomColors>({});
   const [showLineNumbers, setShowLineNumbersState] = useState(false);
   const [wrapCodeBlocks, setWrapCodeBlocksState] = useState(true);
+  const [copyLinks, setCopyLinksState] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() => {
@@ -273,6 +276,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
       if (typeof settings.wrapCodeBlocks === "boolean") {
         setWrapCodeBlocksState(settings.wrapCodeBlocks);
+      }
+      if (typeof settings.copyLinks === "boolean") {
+        setCopyLinksState(settings.copyLinks);
       }
     } catch {
       // If settings can't be loaded, use defaults
@@ -602,6 +608,17 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
   }, []);
 
+  // Save and set copy links
+  const setCopyLinks = useCallback(async (value: boolean) => {
+    setCopyLinksState(value);
+    try {
+      const settings = await getSettings();
+      await updateSettings({ ...settings, copyLinks: value });
+    } catch (error) {
+      console.error("Failed to save copyLinks:", error);
+    }
+  }, []);
+
   // Live CSS variable update during drag (no persistence)
   const setEditorMaxWidthLive = useCallback((value: string) => {
     document.documentElement.style.setProperty("--editor-max-width", value);
@@ -641,6 +658,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         setShowLineNumbers,
         wrapCodeBlocks,
         setWrapCodeBlocks,
+        copyLinks,
+        setCopyLinks,
       }}
     >
       {children}
