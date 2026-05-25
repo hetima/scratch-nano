@@ -133,6 +133,8 @@ interface ThemeContextType {
   setWrapCodeBlocks: (value: boolean) => void;
   copyLinks: boolean;
   setCopyLinks: (value: boolean) => void;
+  defaultSourceMode: boolean;
+  setDefaultSourceMode: (value: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -212,6 +214,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const [showLineNumbers, setShowLineNumbersState] = useState(false);
   const [wrapCodeBlocks, setWrapCodeBlocksState] = useState(true);
   const [copyLinks, setCopyLinksState] = useState(true);
+  const [defaultSourceMode, setDefaultSourceModeState] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() => {
@@ -279,6 +282,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
       if (typeof settings.copyLinks === "boolean") {
         setCopyLinksState(settings.copyLinks);
+      }
+      if (typeof settings.defaultSourceMode === "boolean") {
+        setDefaultSourceModeState(settings.defaultSourceMode);
       }
     } catch {
       // If settings can't be loaded, use defaults
@@ -619,6 +625,17 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
   }, []);
 
+  // Save and set default source mode
+  const setDefaultSourceMode = useCallback(async (value: boolean) => {
+    setDefaultSourceModeState(value);
+    try {
+      const settings = await getSettings();
+      await updateSettings({ ...settings, defaultSourceMode: value });
+    } catch (error) {
+      console.error("Failed to save defaultSourceMode:", error);
+    }
+  }, []);
+
   // Live CSS variable update during drag (no persistence)
   const setEditorMaxWidthLive = useCallback((value: string) => {
     document.documentElement.style.setProperty("--editor-max-width", value);
@@ -660,6 +677,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         setWrapCodeBlocks,
         copyLinks,
         setCopyLinks,
+        defaultSourceMode,
+        setDefaultSourceMode,
       }}
     >
       {children}

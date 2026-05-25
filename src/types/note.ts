@@ -71,6 +71,7 @@ export interface Settings {
   showLineNumbers?: boolean;
   wrapCodeBlocks?: boolean;
   copyLinks?: boolean;
+  defaultSourceMode?: boolean;
 }
 
 export interface FolderNode {

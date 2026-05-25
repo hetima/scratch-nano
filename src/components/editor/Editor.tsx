@@ -143,15 +143,15 @@ export function Editor({
   const pinNote = notesCtx?.pinNote;
   const unpinNote = notesCtx?.unpinNote;
   const notes = notesCtx?.notes;
-  const { textDirection, resolvedTheme, editorFontSettings: fonts, showLineNumbers, copyLinks } = useTheme();
+  const { textDirection, resolvedTheme, editorFontSettings: fonts, showLineNumbers, copyLinks, defaultSourceMode, setDefaultSourceMode } = useTheme();
   const isDark = resolvedTheme === "dark";
 
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [hasTransitioned, setHasTransitioned] = useState(false);
 
-  // Source mode state
-  const [sourceMode, setSourceMode] = useState(false);
+  // Source mode state — initialized from persisted setting
+  const [sourceMode, setSourceMode] = useState(() => defaultSourceMode);
 
   // Dirty + live content tracking for source mode
   const [isDirty, setIsDirty] = useState(false);
@@ -293,10 +293,14 @@ export function Editor({
     }
   }, [currentNote]);
 
-  // Toggle source mode
+  // Toggle source mode and persist the new value
   const toggleSourceMode = useCallback(() => {
-    setSourceMode((prev) => !prev);
-  }, []);
+    setSourceMode((prev) => {
+      const next = !prev;
+      setDefaultSourceMode(next);
+      return next;
+    });
+  }, [setDefaultSourceMode]);
 
   // Listen for toggle-source-mode custom event
   useEffect(() => {

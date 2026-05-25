@@ -135,6 +135,8 @@ export function AppearanceSettingsSection() {
     setWrapCodeBlocks,
     copyLinks,
     setCopyLinks,
+    defaultSourceMode,
+    setDefaultSourceMode,
   } = useTheme();
 
   // Build font options for combobox
@@ -463,6 +465,20 @@ export function AppearanceSettingsSection() {
               type="checkbox"
               checked={copyLinks}
               onChange={(e) => setCopyLinks(e.target.checked)}
+              className="w-4 h-4 accent-accent cursor-pointer"
+            />
+          </div>
+
+          {/* Default Source Mode */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium" htmlFor="default-source-mode">
+              Open in Edit Mode
+            </label>
+            <input
+              id="default-source-mode"
+              type="checkbox"
+              checked={defaultSourceMode}
+              onChange={(e) => setDefaultSourceMode(e.target.checked)}
               className="w-4 h-4 accent-accent cursor-pointer"
             />
           </div>
