@@ -110,7 +110,10 @@ function AppContent() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
-      const isInEditor = !!target.closest(".markdown-preview");
+      const isInEditor =
+        !!target.closest(".markdown-preview") ||
+        !!target.closest(".cm-editor");
+        !!target.closest(".cm-editor");
       const isInInput =
         target.tagName === "INPUT" || target.tagName === "TEXTAREA";
       const isEditorEmpty =
@@ -321,7 +324,7 @@ function AppContent() {
       const target = e.target as HTMLElement;
       // Allow context menu in editor (prose class), inputs, and note list sidebar
       const isInEditor =
-        target.closest(".prose") || target.closest(".markdown-preview");
+        target.closest(".prose") || target.closest(".markdown-preview") || target.closest(".cm-editor");
       const isInput =
         target.tagName === "INPUT" || target.tagName === "TEXTAREA";
       const isInNoteList = target.closest("[data-note-list]");

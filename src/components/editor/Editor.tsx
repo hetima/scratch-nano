@@ -113,6 +113,10 @@ export function Editor({
   // Source mode state
   const [sourceMode, setSourceMode] = useState(false);
 
+  // Dirty + live content tracking for source mode
+  const [isDirty, setIsDirty] = useState(false);
+  const [liveContent, setLiveContent] = useState<string | null>(null);
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -126,10 +130,20 @@ export function Editor({
   const needsSidebarDelay = focusMode && sidebarVisible;
   const isSidebarActive = sidebarVisible && !focusMode;
 
-  // Reset source mode when switching notes
+  // Reset state when switching notes
   useEffect(() => {
     setSourceMode(false);
+    setIsDirty(false);
+    setLiveContent(null);
   }, [currentNote?.id]);
+
+  // Clear dirty state when currentNote.content updates from context (after save)
+  useEffect(() => {
+    if (isDirty && liveContent === currentNote?.content) {
+      setIsDirty(false);
+      setLiveContent(null);
+    }
+  }, [currentNote?.content, isDirty, liveContent]);
 
   // Scroll to top when switching notes
   useEffect(() => {
@@ -151,11 +165,12 @@ export function Editor({
   const isPinned =
     settings?.pinnedNoteIds?.includes(currentNote?.id || "") || false;
 
-  // Render markdown to HTML
+  // Render markdown to HTML — uses liveContent in source mode for real-time preview
+  const displayContent = liveContent ?? currentNote?.content;
   const renderedHtml = useMemo(() => {
-    if (!currentNote?.content) return "";
-    return marked.parse(currentNote.content) as string;
-  }, [currentNote?.content]);
+    if (!displayContent) return "";
+    return marked.parse(displayContent) as string;
+  }, [displayContent]);
 
   // Copy handlers — use currentNote.content directly (no live editor state)
   const handleCopyMarkdown = useCallback(async () => {
@@ -438,10 +453,30 @@ export function Editor({
                 <span>Refresh</span>
               </button>
             </Tooltip>
+          ) : isDirty ? (
+            <Tooltip content={`Save changes (${mod}${isMac ? "" : "+"}S)`}>
+              <button
+                onClick={() => {
+                  // Read current content from CodeMirror and save
+                  if (saveNote && liveContent != null) {
+                    saveNote(liveContent, currentNote.id);
+                    setIsDirty(false);
+                  }
+                }}
+                className="h-7 w-7 flex items-center justify-center rounded-full hover:bg-bg-emphasis transition-colors"
+              >
+                <CircleCheckIcon className="w-4.5 h-4.5 mt-px stroke-[1.5] text-text" />
+              </button>
+            </Tooltip>
           ) : (
-            <Tooltip content="Read-only preview">
+            <Tooltip content={sourceMode ? "Editing" : "Read-only preview"}>
               <div className="h-7 w-7 flex items-center justify-center rounded-full">
-                <CircleCheckIcon className="w-4.5 h-4.5 mt-px stroke-[1.5] text-text-muted/40" />
+                <CircleCheckIcon
+                  className={cn(
+                    "w-4.5 h-4.5 mt-px stroke-[1.5]",
+                    sourceMode ? "text-text-muted/70" : "text-text-muted/40",
+                  )}
+                />
               </div>
             </Tooltip>
           )}
@@ -622,6 +657,12 @@ export function Editor({
                   if (saveNote) {
                     saveNote(newContent, currentNote.id);
                   }
+                  setIsDirty(false);
+                  // liveContent will sync when currentNote updates from context
+                }}
+                onChange={(newContent) => {
+                  setLiveContent(newContent);
+                  setIsDirty(true);
                 }}
                 fontFamily={getFontFamilyValue(fonts.baseFontFamily)}
                 fontSize={fonts.baseFontSize}

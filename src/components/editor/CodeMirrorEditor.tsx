@@ -7,6 +7,7 @@ import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirro
 interface CodeMirrorEditorProps {
   content: string;
   onSave: (content: string) => void;
+  onChange?: (content: string) => void;
   fontFamily: string;
   fontSize: number;
   lineHeight: number;
@@ -84,6 +85,7 @@ function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, is
 export function CodeMirrorEditor({
   content,
   onSave,
+  onChange,
   fontFamily,
   fontSize,
   lineHeight,
@@ -96,6 +98,11 @@ export function CodeMirrorEditor({
   // Track the content we last set from outside, to avoid clobbering user edits
   // and to know when a save is actually needed
   const lastSetContent = useRef(content);
+  // Keep callbacks in refs so updateListener always calls the latest version
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   const handleSave = useCallback(() => {
     const view = viewRef.current;
@@ -103,10 +110,10 @@ export function CodeMirrorEditor({
     const newContent = view.state.doc.toString();
     if (newContent !== lastSetContent.current) {
       lastSetContent.current = newContent;
-      onSave(newContent);
+      onSaveRef.current(newContent);
     }
     return true;
-  }, [onSave]);
+  }, []);
 
   // Create editor on mount
   useEffect(() => {
@@ -125,6 +132,11 @@ export function CodeMirrorEditor({
         saveKeymap,
         themeCompartment.current.of(buildTheme(fontFamily, fontSize, lineHeight, isDark)),
         EditorView.lineWrapping,
+        EditorView.updateListener.of((update) => {
+          if (update.docChanged) {
+            onChangeRef.current?.(update.state.doc.toString());
+          }
+        }),
       ],
     });
 
