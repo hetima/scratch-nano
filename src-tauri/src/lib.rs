@@ -13,6 +13,7 @@ use tantivy::{doc, Index, IndexReader, IndexWriter, ReloadPolicy};
 use tauri::{AppHandle, Emitter, Manager, State, WebviewUrl};
 use tauri::webview::WebviewWindowBuilder;
 use tauri_plugin_clipboard_manager::ClipboardExt;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags, WindowExt};
 use tokio::fs;
 use tokio::io::AsyncWriteExt;
 
@@ -146,6 +147,8 @@ pub struct Settings {
     pub default_source_mode: Option<bool>,
     #[serde(rename = "selectedFolder")]
     pub selected_folder: Option<String>,
+    #[serde(rename = "sidebarWidth")]
+    pub sidebar_width: Option<u32>,
 }
 
 // Search result
@@ -3087,7 +3090,12 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_system_fonts::init())
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .setup(|app| {
+            // Restore window size/position before anything else
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.restore_state(StateFlags::SIZE | StateFlags::POSITION);
+            }
             // Load app config on startup (contains notes folder path)
             let mut app_config = load_app_config(app.handle());
 
@@ -3189,6 +3197,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            // Save window state on close
+            if let tauri::WindowEvent::CloseRequested { .. } = event {
+                if window.label() == "main" {
+                    let _ = window.app_handle().save_window_state(StateFlags::SIZE | StateFlags::POSITION);
+                }
+            }
             // Handle drag-and-drop of .md files onto any window
             if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
                 let app = window.app_handle();

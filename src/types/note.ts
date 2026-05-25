@@ -74,6 +74,7 @@ export interface Settings {
   defaultSourceMode?: boolean;
   interfaceFont?: FontFamily;
   selectedFolder?: string;
+  sidebarWidth?: number;
 }
 
 export interface FolderNode {

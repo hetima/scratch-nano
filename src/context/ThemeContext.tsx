@@ -113,6 +113,8 @@ interface ThemeContextType {
   ) => void;
   resetEditorFontSettings: () => void;
   reloadSettings: () => Promise<void>;
+  interfaceFont: FontFamily;
+  setInterfaceFont: (font: FontFamily) => void;
   textDirection: TextDirection;
   setTextDirection: (dir: TextDirection) => void;
   editorWidth: EditorWidth;
@@ -135,6 +137,8 @@ interface ThemeContextType {
   setCopyLinks: (value: boolean) => void;
   defaultSourceMode: boolean;
   setDefaultSourceMode: (value: boolean) => void;
+  sidebarWidth: number;
+  setSidebarWidth: (px: number) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -216,6 +220,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   const [wrapCodeBlocks, setWrapCodeBlocksState] = useState(true);
   const [copyLinks, setCopyLinksState] = useState(true);
   const [defaultSourceMode, setDefaultSourceModeState] = useState(false);
+  const [sidebarWidth, setSidebarWidthState] = useState(256);
   const [isInitialized, setIsInitialized] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() => {
@@ -289,6 +294,14 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
       if (settings.interfaceFont) {
         setInterfaceFontState(settings.interfaceFont);
+      }
+      if (
+        typeof settings.sidebarWidth === "number" &&
+        settings.sidebarWidth >= 180 &&
+        settings.sidebarWidth <= window.innerWidth - 200
+      ) {
+        setSidebarWidthState(settings.sidebarWidth);
+        document.documentElement.style.setProperty("--sidebar-width", `${settings.sidebarWidth}px`);
       }
     } catch {
       // If settings can't be loaded, use defaults
@@ -659,6 +672,19 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     }
   }, []);
 
+  // Save and set sidebar width
+  const setSidebarWidth = useCallback(async (px: number) => {
+    const rounded = Math.round(px);
+    setSidebarWidthState(rounded);
+    document.documentElement.style.setProperty("--sidebar-width", `${rounded}px`);
+    try {
+      const settings = await getSettings();
+      await updateSettings({ ...settings, sidebarWidth: rounded });
+    } catch (error) {
+      console.error("Failed to save sidebarWidth:", error);
+    }
+  }, []);
+
   // Live CSS variable update during drag (no persistence)
   const setEditorMaxWidthLive = useCallback((value: string) => {
     document.documentElement.style.setProperty("--editor-max-width", value);
@@ -704,6 +730,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         setCopyLinks,
         defaultSourceMode,
         setDefaultSourceMode,
+        sidebarWidth,
+        setSidebarWidth,
       }}
     >
       {children}

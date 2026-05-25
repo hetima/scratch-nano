@@ -18,6 +18,8 @@
     "core:menu:default",
     "clipboard-manager:allow-write-text",
     "updater:default",
-    "system-fonts:default"
+    "system-fonts:default",
+    "window-state:allow-restore-state",
+    "window-state:allow-save-window-state"
   ]
 }

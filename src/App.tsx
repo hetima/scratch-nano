@@ -49,7 +49,35 @@ function AppContent() {
     currentNote,
     syncNotesFolder,
   } = useNotes();
-  const { interfaceZoom, setInterfaceZoom, reloadSettings } = useTheme();
+  const { interfaceZoom, setInterfaceZoom, reloadSettings, setSidebarWidth } = useTheme();
+
+  const handleSidebarResizePointerDown = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = parseFloat(
+      getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width").trim()
+    ) || 256;
+    document.body.classList.add("sidebar-resizing");
+
+    const onMove = (ev: PointerEvent) => {
+      const delta = ev.clientX - startX;
+      const newWidth = Math.min(Math.max(startWidth + delta, 180), window.innerWidth - 200);
+      document.documentElement.style.setProperty("--sidebar-width", `${newWidth}px`);
+    };
+
+    const onUp = () => {
+      document.body.classList.remove("sidebar-resizing");
+      const newWidth = parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--sidebar-width").trim()
+      ) || 256;
+      void setSidebarWidth(newWidth);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+    };
+
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }, [setSidebarWidth]);
   const interfaceZoomRef = useRef(interfaceZoom);
   interfaceZoomRef.current = interfaceZoom;
   const currentNoteRef = useRef(currentNote);
@@ -59,7 +87,7 @@ function AppContent() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  // Listen for set-notes-folder event from CLI (scratch .)
+// Listen for set-notes-folder event from CLI (scratch .)
   // Placed here in AppContent where both NotesContext and ThemeContext are available
   useEffect(() => {
     let cancelled = false;
@@ -380,11 +408,20 @@ function AppContent() {
           <SettingsPage onBack={closeSettings} />
         ) : (
           <>
-            <div
-              data-sidebar
-              className={`transition-all duration-500 ease-out overflow-hidden ${!sidebarVisible || focusMode ? "opacity-0 -translate-x-4 w-0 pointer-events-none" : "opacity-100 translate-x-0 w-64"}`}
-            >
-              <Sidebar onOpenSettings={toggleSettings} />
+            <div className="relative shrink-0">
+              <div
+                data-sidebar
+                className={`transition-all duration-500 ease-out overflow-hidden ${!sidebarVisible || focusMode ? "opacity-0 -translate-x-4 pointer-events-none" : "opacity-100 translate-x-0"}`}
+                style={{ width: !sidebarVisible || focusMode ? 0 : "var(--sidebar-width, 256px)" }}
+              >
+                <Sidebar onOpenSettings={toggleSettings} />
+              </div>
+              {sidebarVisible && !focusMode && (
+                <div
+                  className="absolute top-0 right-0 w-1 h-full cursor-col-resize hover:bg-accent/30 z-10"
+                  onPointerDown={handleSidebarResizePointerDown}
+                />
+              )}
             </div>
             <Editor
               onToggleSidebar={toggleSidebar}

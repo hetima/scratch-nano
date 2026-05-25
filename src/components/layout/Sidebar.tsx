@@ -311,7 +311,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setDragLabel(null)}
     >
-    <div className="relative w-64 h-full bg-bg-secondary border-r border-border flex flex-col select-none">
+    <div className="relative w-full h-full bg-bg-secondary border-r border-border flex flex-col select-none">
       {/* Header row with drag region */}
       <div className="h-11 shrink-0 flex items-center justify-between pl-4 pr-3" data-tauri-drag-region>
         <div className="flex items-center gap-1 min-w-0 flex-1">
