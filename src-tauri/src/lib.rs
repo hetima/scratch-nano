@@ -144,6 +144,8 @@ pub struct Settings {
     pub custom_colors_dark: Option<std::collections::HashMap<String, String>>,
     #[serde(rename = "defaultSourceMode")]
     pub default_source_mode: Option<bool>,
+    #[serde(rename = "selectedFolder")]
+    pub selected_folder: Option<String>,
 }
 
 // Search result

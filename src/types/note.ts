@@ -73,6 +73,7 @@ export interface Settings {
   copyLinks?: boolean;
   defaultSourceMode?: boolean;
   interfaceFont?: FontFamily;
+  selectedFolder?: string;
 }
 
 export interface FolderNode {

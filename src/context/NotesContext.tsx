@@ -514,6 +514,11 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       await notesService.startFileWatcher(path);
       const notesList = await notesService.listNotes();
       setNotes(notesList);
+      // Persist selected folder
+      try {
+        const settings = await notesService.getSettings();
+        await notesService.updateSettings({ ...settings, selectedFolder: path });
+      } catch { /* ignore */ }
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to switch notes folder"
@@ -648,7 +653,14 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       try {
         const folders = await notesService.getNotesFolders();
         setNotesFoldersList(folders);
-        const folder = folders[0] ?? null;
+        // Restore selected folder from settings, fallback to first folder
+        let folder = folders[0] ?? null;
+        try {
+          const settings = await notesService.getSettings();
+          if (settings.selectedFolder && folders.includes(settings.selectedFolder)) {
+            folder = settings.selectedFolder;
+          }
+        } catch { /* use default */ }
         setNotesFolderState(folder);
         if (folder) {
           await notesService.startFileWatcher(folder);
