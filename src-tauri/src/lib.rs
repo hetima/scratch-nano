@@ -81,9 +81,15 @@ impl Default for ThemeSettings {
 #[serde(rename_all = "camelCase")]
 pub struct EditorFontSettings {
     pub base_font_family: Option<String>, // "system-sans" | "serif" | "monospace"
-    pub base_font_size: Option<f32>,      // in px, default 16
+    pub base_font_size: Option<f32>,      // in px, default 15
     pub bold_weight: Option<i32>,         // 600, 700, 800 for headings and bold
     pub line_height: Option<f32>,         // default 1.6
+    // Edit mode (CodeMirror) font settings
+    pub edit_font_family: Option<String>,
+    pub edit_font_size: Option<f32>,
+    pub edit_line_height: Option<f32>,
+    // Code font (inline code + code blocks)
+    pub code_font_family: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -700,11 +706,11 @@ fn get_app_config_path(app: &AppHandle) -> Result<PathBuf> {
     Ok(app_data.join("config.json"))
 }
 
-// Get per-folder settings file path (in .scratch-nano/ within notes folder)
-fn get_settings_path(notes_folder: &str) -> PathBuf {
-    let scratch_dir = PathBuf::from(notes_folder).join(".scratch-nano");
-    std::fs::create_dir_all(&scratch_dir).ok();
-    scratch_dir.join("settings.json")
+// Get settings file path (in app data directory)
+fn get_settings_path(app: &AppHandle) -> Result<PathBuf> {
+    let app_data = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&app_data)?;
+    Ok(app_data.join("settings.json"))
 }
 
 // Get search index path
@@ -739,9 +745,12 @@ fn save_app_config(app: &AppHandle, config: &AppConfig) -> Result<()> {
     Ok(())
 }
 
-// Load per-folder settings from disk
-fn load_settings(notes_folder: &str) -> Settings {
-    let path = get_settings_path(notes_folder);
+// Load settings from app data directory
+fn load_settings(app: &AppHandle) -> Settings {
+    let path = match get_settings_path(app) {
+        Ok(p) => p,
+        Err(_) => return Settings::default(),
+    };
 
     if path.exists() {
         std::fs::read_to_string(&path)
@@ -753,9 +762,9 @@ fn load_settings(notes_folder: &str) -> Settings {
     }
 }
 
-// Save per-folder settings to disk
-fn save_settings(notes_folder: &str, settings: &Settings) -> Result<()> {
-    let path = get_settings_path(notes_folder);
+// Save settings to app data directory
+fn save_settings(app: &AppHandle, settings: &Settings) -> Result<()> {
+    let path = get_settings_path(app)?;
     let content = serde_json::to_string_pretty(settings)?;
     std::fs::write(path, content)?;
     Ok(())
@@ -801,18 +810,14 @@ fn initialize_notes_folder(app: &AppHandle, path_buf: &PathBuf, state: &AppState
     let assets = path_buf.join("assets");
     std::fs::create_dir_all(&assets).map_err(|e| e.to_string())?;
 
-    // Create .scratch-nano config folder
-    let scratch_dir = path_buf.join(".scratch-nano");
-    std::fs::create_dir_all(&scratch_dir).map_err(|e| e.to_string())?;
-
     // Verify write access early to avoid later silent failures
-    let write_test_path = scratch_dir.join(".write-test");
+    let write_test_path = path_buf.join("assets").join(".write-test");
     std::fs::write(&write_test_path, b"ok")
         .map_err(|e| format!("Notes folder is not writable: {}", e))?;
     let _ = std::fs::remove_file(&write_test_path);
 
-    // Load per-folder settings (starts fresh with defaults if none exist)
-    let settings = load_settings(&normalized_path);
+    // Load settings (starts fresh with defaults if none exist)
+    let settings = load_settings(app);
 
     // Update app config
     {
@@ -1366,6 +1371,7 @@ async fn rename_folder(
     old_path: String,
     new_name: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<(), String> {
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
@@ -1434,7 +1440,7 @@ async fn rename_folder(
             }
         }
         // Save settings
-        let _ = save_settings(&folder, &settings);
+        let _ = save_settings(&app, &settings);
     }
 
     // Update cache
@@ -1476,6 +1482,7 @@ async fn move_note(
     id: String,
     target_folder: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<String, String> {
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
@@ -1532,7 +1539,7 @@ async fn move_note(
                 }
             }
         }
-        let _ = save_settings(&folder, &settings);
+        let _ = save_settings(&app, &settings);
     }
 
     // Update cache
@@ -1564,6 +1571,7 @@ async fn move_folder(
     path: String,
     target_parent: String,
     state: State<'_, AppState>,
+    app: AppHandle,
 ) -> Result<(), String> {
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
@@ -1637,7 +1645,7 @@ async fn move_folder(
                 }
             }
         }
-        let _ = save_settings(&folder, &settings);
+        let _ = save_settings(&app, &settings);
     }
 
     // Update cache
@@ -1683,19 +1691,15 @@ fn get_settings(state: State<AppState>) -> Settings {
 fn update_settings(
     new_settings: Settings,
     state: State<AppState>,
+    app: AppHandle,
 ) -> Result<(), String> {
-    let folder = {
-        let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folder.clone().ok_or("Notes folder not set")?
-    };
-
     {
         let mut settings = state.settings.write().expect("settings write lock");
         *settings = new_settings;
     }
 
     let settings = state.settings.read().expect("settings read lock");
-    save_settings(&folder, &settings).map_err(|e| e.to_string())?;
+    save_settings(&app, &settings).map_err(|e| e.to_string())?;
 
     Ok(())
 }
@@ -2784,12 +2788,8 @@ pub fn run() {
                 }
             }
 
-            // Load per-folder settings if notes folder is set
-            let settings = if let Some(ref folder) = app_config.notes_folder {
-                load_settings(folder)
-            } else {
-                Settings::default()
-            };
+            // Load settings
+            let settings = load_settings(app.handle());
 
             // Initialize search index if notes folder is set
             let ignored_dirs = get_effective_ignored_dirs(&settings);
