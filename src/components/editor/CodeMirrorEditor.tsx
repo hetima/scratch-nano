@@ -3,7 +3,7 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirro
 import { EditorState, Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
-import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+import { syntaxHighlighting, HighlightStyle, LanguageDescription } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
 
 interface CodeMirrorEditorProps {
@@ -85,11 +85,44 @@ function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, co
   );
 }
 
-function buildCodeFontHighlight(codeFontFamily: string) {
+function buildSyntaxHighlighting(codeFontFamily: string) {
   return syntaxHighlighting(
-    HighlightStyle.define([{ tag: tags.monospace, fontFamily: codeFontFamily }]),
+    HighlightStyle.define(
+      [
+        { tag: tags.keyword, color: "var(--color-syntax-keyword)" },
+        { tag: [tags.string, tags.regexp], color: "var(--color-syntax-string)" },
+        { tag: [tags.number, tags.bool], color: "var(--color-syntax-number)" },
+        { tag: tags.lineComment, color: "var(--color-syntax-comment)", fontStyle: "italic" },
+        { tag: tags.blockComment, color: "var(--color-syntax-comment)", fontStyle: "italic" },
+        { tag: [tags.function(tags.variableName), tags.function(tags.propertyName)], color: "var(--color-syntax-function)" },
+        { tag: [tags.variableName, tags.self], color: "var(--color-syntax-variable)" },
+        { tag: [tags.typeName, tags.className], color: "var(--color-syntax-type)" },
+        { tag: tags.operator, color: "var(--color-syntax-operator)" },
+        { tag: tags.attributeName, color: "var(--color-syntax-attr)" },
+        { tag: tags.deleted, color: "var(--color-syntax-variable)" },
+        { tag: tags.inserted, color: "var(--color-syntax-string)" },
+      ],
+      { all: { fontFamily: codeFontFamily } },
+    ),
   );
 }
+
+const CODE_LANGUAGES = [
+  LanguageDescription.of({ name: "javascript", alias: ["js", "jsx"], load: async () => (await import("@codemirror/lang-javascript")).javascript() }),
+  LanguageDescription.of({ name: "typescript", alias: ["ts", "tsx"], load: async () => (await import("@codemirror/lang-javascript")).javascript({ typescript: true }) }),
+  LanguageDescription.of({ name: "python", alias: ["py"], load: async () => (await import("@codemirror/lang-python")).python() }),
+  LanguageDescription.of({ name: "rust", alias: ["rs"], load: async () => (await import("@codemirror/lang-rust")).rust() }),
+  LanguageDescription.of({ name: "css", load: async () => (await import("@codemirror/lang-css")).css() }),
+  LanguageDescription.of({ name: "html", load: async () => (await import("@codemirror/lang-html")).html() }),
+  LanguageDescription.of({ name: "java", load: async () => (await import("@codemirror/lang-java")).java() }),
+  LanguageDescription.of({ name: "sql", load: async () => (await import("@codemirror/lang-sql")).sql() }),
+  LanguageDescription.of({ name: "json", load: async () => (await import("@codemirror/lang-json")).json() }),
+  LanguageDescription.of({ name: "cpp", alias: ["c"], load: async () => (await import("@codemirror/lang-cpp")).cpp() }),
+  LanguageDescription.of({ name: "go", alias: ["golang"], load: async () => (await import("@codemirror/lang-go")).go() }),
+  LanguageDescription.of({ name: "php", load: async () => (await import("@codemirror/lang-php")).php() }),
+  LanguageDescription.of({ name: "yaml", alias: ["yml"], load: async () => (await import("@codemirror/lang-yaml")).yaml() }),
+  LanguageDescription.of({ name: "xml", load: async () => (await import("@codemirror/lang-xml")).xml() }),
+];
 
 export function CodeMirrorEditor({
   content,
@@ -137,14 +170,14 @@ export function CodeMirrorEditor({
     const state = EditorState.create({
       doc: content,
       extensions: [
-        markdown(),
+        markdown({ codeLanguages: CODE_LANGUAGES }),
         lineNumbersCompartment.current.of(showLineNumbers ? lineNumbers() : []),
         highlightActiveLine(),
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         saveKeymap,
         themeCompartment.current.of(buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark)),
-        codeFontCompartment.current.of(buildCodeFontHighlight(codeFontFamily)),
+        codeFontCompartment.current.of(buildSyntaxHighlighting(codeFontFamily)),
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
@@ -192,7 +225,7 @@ export function CodeMirrorEditor({
           buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark),
         ),
         codeFontCompartment.current.reconfigure(
-          buildCodeFontHighlight(codeFontFamily),
+          buildSyntaxHighlighting(codeFontFamily),
         ),
       ],
     });
