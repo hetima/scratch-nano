@@ -137,6 +137,8 @@ export function AppearanceSettingsSection() {
     setCopyLinks,
     defaultSourceMode,
     setDefaultSourceMode,
+    interfaceFont,
+    setInterfaceFont,
   } = useTheme();
 
   // Build font options for combobox
@@ -263,6 +265,18 @@ export function AppearanceSettingsSection() {
       <section>
         <h2 className="text-xl font-medium mb-3">Layout</h2>
         <div className="rounded-[10px] border border-border pl-4 py-3 pr-3 space-y-2">
+          {/* Interface Font */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium">Interface Font</label>
+            <Combobox
+              value={interfaceFont}
+              onChange={(v) => setInterfaceFont(v as FontFamily)}
+              options={fontOptions}
+              className="w-60"
+              placeholder="Search fonts..."
+            />
+          </div>
+
           {/* Interface Zoom */}
           <div className="flex items-center justify-between">
             <label className="text-sm text-text font-medium">

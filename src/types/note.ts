@@ -72,6 +72,7 @@ export interface Settings {
   wrapCodeBlocks?: boolean;
   copyLinks?: boolean;
   defaultSourceMode?: boolean;
+  interfaceFont?: FontFamily;
 }
 
 export interface FolderNode {

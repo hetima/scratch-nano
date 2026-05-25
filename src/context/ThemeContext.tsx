@@ -205,6 +205,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   >(defaultEditorFontSettings);
   const [textDirection, setTextDirectionState] = useState<TextDirection>("auto");
   const [editorWidth, setEditorWidthState] = useState<EditorWidth>("normal");
+  const [interfaceFont, setInterfaceFontState] = useState<FontFamily>("system-sans");
   const [interfaceZoom, setInterfaceZoomState] = useState(1.0);
   const [customEditorWidthPx, setCustomEditorWidthPxState] = useState<number>(
     DEFAULT_CUSTOM_WIDTH_PX
@@ -285,6 +286,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
       if (typeof settings.defaultSourceMode === "boolean") {
         setDefaultSourceModeState(settings.defaultSourceMode);
+      }
+      if (settings.interfaceFont) {
+        setInterfaceFontState(settings.interfaceFont);
       }
     } catch {
       // If settings can't be loaded, use defaults
@@ -367,6 +371,23 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     applyLayoutCSSVariables(editorWidth, customEditorWidthPx);
   }, [editorWidth, customEditorWidthPx]);
 
+  // Apply interface font to --font-sans CSS variable
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--font-sans", getFontFamilyValue(interfaceFont));
+  }, [interfaceFont]);
+
+  // Save interface font to backend
+  const setInterfaceFont = useCallback(async (font: FontFamily) => {
+    setInterfaceFontState(font);
+    try {
+      const settings = await getSettings();
+      await updateSettings({ ...settings, interfaceFont: font });
+    } catch (error) {
+      console.error("Failed to save interface font:", error);
+    }
+  }, []);
+
   // Apply interface zoom whenever it changes (suppress transitions during zoom)
   useEffect(() => {
     const root = document.documentElement;
@@ -416,6 +437,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     setEditorWidthState("normal");
     setInterfaceZoomState(1.0);
     setCustomEditorWidthPxState(DEFAULT_CUSTOM_WIDTH_PX);
+    setInterfaceFontState("system-sans");
     setCustomColorsLightState({});
     setCustomColorsDarkState({});
     try {
@@ -429,6 +451,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         customEditorWidthPx: undefined,
         customColorsLight: undefined,
         customColorsDark: undefined,
+        interfaceFont: undefined,
       });
     } catch (error) {
       console.error("Failed to reset editor settings:", error);
@@ -657,6 +680,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         setEditorFontSetting,
         resetEditorFontSettings,
         reloadSettings,
+        interfaceFont,
+        setInterfaceFont,
         textDirection,
         setTextDirection,
         editorWidth,
