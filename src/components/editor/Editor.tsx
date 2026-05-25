@@ -11,7 +11,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { mod, shift, isMac } from "../../lib/platform";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { useOptionalNotes } from "../../context/NotesContext";
+import { useOptionalNotes, useOptionalNotesActions } from "../../context/NotesContext";
 import { useTheme, getFontFamilyValue } from "../../context/ThemeContext";
 import { EditorWidthHandles } from "./EditorWidthHandle";
 import { CodeMirrorEditor } from "./CodeMirrorEditor";
@@ -94,6 +94,7 @@ export function Editor({
   saveToFolderDisabled,
 }: EditorProps) {
   const notesCtx = useOptionalNotes();
+  const notesActionsCtx = useOptionalNotesActions();
 
   const currentNote = previewMode
     ? previewMode.content !== null
@@ -150,6 +151,21 @@ export function Editor({
     setIsDirty(false);
     setLiveContent(null);
   }, [currentNote?.id]);
+
+  // Register a pending save function so NotesContext can auto-save on note switch
+  useEffect(() => {
+    const setPendingSave = notesActionsCtx?.setPendingSave;
+    if (!setPendingSave) return;
+    if (!previewMode && isDirty && liveContent !== null && saveNote) {
+      const content = liveContent;
+      setPendingSave(async () => {
+        await saveNote(content);
+      });
+    } else {
+      setPendingSave(null);
+    }
+    return () => setPendingSave(null);
+  }, [isDirty, liveContent, saveNote, notesActionsCtx, previewMode]);
 
   // Clear dirty state when currentNote.content updates from context (after save)
   useEffect(() => {

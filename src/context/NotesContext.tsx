@@ -31,6 +31,7 @@ interface NotesDataContextValue {
 
 // Actions context: stable references, rarely causes re-renders
 interface NotesActionsContextValue {
+  setPendingSave: (fn: (() => Promise<void>) | null) => void;
   selectNote: (id: string) => Promise<void>;
   createNote: () => Promise<void>;
   consumePendingNewNote: (id: string) => boolean;
@@ -86,6 +87,12 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const searchRequestIdRef = useRef(0);
   // Tracks the ID of a newly created note so Editor can focus its title.
   const pendingNewNoteIdRef = useRef<string | null>(null);
+  // Holds a save function registered by Editor when there are unsaved changes.
+  const pendingSaveRef = useRef<(() => Promise<void>) | null>(null);
+
+  const setPendingSave = useCallback((fn: (() => Promise<void>) | null) => {
+    pendingSaveRef.current = fn;
+  }, []);
 
   const refreshNotes = useCallback(async () => {
     if (!notesFolder) return;
@@ -109,6 +116,9 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   }, [refreshNotes]);
 
   const selectNote = useCallback(async (id: string) => {
+    if (pendingSaveRef.current) {
+      await pendingSaveRef.current();
+    }
     const requestId = ++selectRequestIdRef.current;
     try {
       if (pendingNewNoteIdRef.current !== id) {
@@ -668,6 +678,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   // Memoize actions context value - these are stable callbacks
   const actionsValue = useMemo<NotesActionsContextValue>(
     () => ({
+      setPendingSave,
       selectNote,
       createNote,
       consumePendingNewNote,
@@ -690,6 +701,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       moveFolder: moveFolderAction,
     }),
     [
+      setPendingSave,
       selectNote,
       createNote,
       consumePendingNewNote,
@@ -748,6 +760,10 @@ export function useNotes() {
 }
 
 // Optional hook that returns null when outside a NotesProvider (for preview mode)
+export function useOptionalNotesActions() {
+  return useContext(NotesActionsContext);
+}
+
 export function useOptionalNotes() {
   const data = useContext(NotesDataContext);
   const actions = useContext(NotesActionsContext);
