@@ -3,6 +3,7 @@ export interface NoteMetadata {
   title: string;
   preview: string;
   modified: number;
+  isPinned: boolean;
 }
 
 export interface Note {
@@ -49,12 +50,16 @@ export type ThemeColorKey =
 // Partial map of color overrides (hex strings)
 export type CustomColors = Partial<Record<ThemeColorKey, string>>;
 
-// Per-folder settings (stored in .scratch-nano/settings.json)
+// Per-folder settings (stored in pinned-files.json in app data)
+export interface PinnedNotes {
+  pinnedNotePaths: string[];
+}
+
+// App settings (stored in settings.json in app data)
 export interface Settings {
   theme: ThemeSettings;
   editorFont?: EditorFontSettings;
   foldersEnabled?: boolean;
-  pinnedNoteIds?: string[];
   textDirection?: TextDirection;
   editorWidth?: EditorWidth;
   customEditorWidthPx?: number;

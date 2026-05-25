@@ -199,24 +199,6 @@ export function NotesProvider({ children }: { children: ReactNode }) {
         const updated = await notesService.saveNote(savingNoteId, content);
         updatedId = updated.id;
 
-        // If the note was renamed (ID changed), also mark the new ID
-        if (updated.id !== savingNoteId) {
-          recentlySavedRef.current.add(updated.id);
-
-          // Transfer pin status to new ID
-          const currentSettings = await notesService.getSettings();
-          const pinnedIds = currentSettings.pinnedNoteIds || [];
-          if (pinnedIds.includes(savingNoteId)) {
-            const updatedSettings = {
-              ...currentSettings,
-              pinnedNoteIds: pinnedIds.map((id) =>
-                id === savingNoteId ? updated.id : id
-              ),
-            };
-            await notesService.updateSettings(updatedSettings);
-          }
-        }
-
         // Clear external changes flag - if it was set by our own save, we want to ignore it
         setHasExternalChanges(false);
 
@@ -255,18 +237,6 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       try {
         await notesService.deleteNote(id);
-
-        // Clean up pinned status for deleted note
-        const currentSettings = await notesService.getSettings();
-        const pinnedIds = currentSettings.pinnedNoteIds || [];
-        if (pinnedIds.includes(id)) {
-          const updatedSettings = {
-            ...currentSettings,
-            pinnedNoteIds: pinnedIds.filter((pinId) => pinId !== id),
-          };
-          await notesService.updateSettings(updatedSettings);
-        }
-
         // Only clear selection if we're deleting the currently selected note
         setSelectedNoteId((prevId) => {
           if (prevId === id) {
@@ -306,17 +276,8 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const pinNote = useCallback(
     async (id: string) => {
       try {
-        const currentSettings = await notesService.getSettings();
-        const pinnedIds = currentSettings.pinnedNoteIds || [];
-
-        if (!pinnedIds.includes(id)) {
-          const updatedSettings = {
-            ...currentSettings,
-            pinnedNoteIds: [...pinnedIds, id],
-          };
-          await notesService.updateSettings(updatedSettings);
-          await refreshNotes();
-        }
+        await notesService.pinNote(id);
+        await refreshNotes();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to pin note");
       }
@@ -327,14 +288,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const unpinNote = useCallback(
     async (id: string) => {
       try {
-        const currentSettings = await notesService.getSettings();
-        const pinnedIds = currentSettings.pinnedNoteIds || [];
-
-        const updatedSettings = {
-          ...currentSettings,
-          pinnedNoteIds: pinnedIds.filter((pinId) => pinId !== id),
-        };
-        await notesService.updateSettings(updatedSettings);
+        await notesService.unpinNote(id);
         await refreshNotes();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to unpin note");

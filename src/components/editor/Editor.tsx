@@ -176,8 +176,7 @@ export function Editor({
     }
   }, [currentNote?.id, notes, previewMode]);
 
-  const isPinned =
-    settings?.pinnedNoteIds?.includes(currentNote?.id || "") || false;
+  const isPinned = notesCtx?.notes.find(n => n.id === currentNote?.id)?.isPinned ?? false;
 
   // Render markdown to HTML — uses liveContent in source mode for real-time preview
   const displayContent = liveContent ?? currentNote?.content;

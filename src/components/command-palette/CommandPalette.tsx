@@ -14,7 +14,7 @@ import { useNotes } from "../../context/NotesContext";
 import { useTheme } from "../../context/ThemeContext";
 import * as notesService from "../../services/notes";
 import { downloadPdf, downloadMarkdown } from "../../services/pdf";
-import type { Settings } from "../../types/note";
+import type { Settings, PinnedNotes } from "../../types/note";
 import {
   CommandItem,
   AlertDialog,
@@ -90,13 +90,15 @@ export function CommandPalette({
     { id: string; title: string; preview: string; modified: number }[]
   >([]);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [pinnedNotes, setPinnedNotes] = useState<PinnedNotes>({ pinnedNotePaths: [] });
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Load settings when palette opens or current note changes
+  // Load settings and pinned notes when palette opens or current note changes
   useEffect(() => {
     if (open) {
       notesService.getSettings().then(setSettings);
+      notesService.getPinnedNotes().then(setPinnedNotes);
     }
   }, [open, currentNote?.id]);
 
@@ -128,7 +130,7 @@ export function CommandPalette({
     // Add note-specific commands if a note is selected
     if (currentNote) {
       const isPinned =
-        settings?.pinnedNoteIds?.includes(currentNote.id) || false;
+        pinnedNotes.pinnedNotePaths.includes(currentNote.id) || false;
 
       baseCommands.push(
         {
@@ -367,6 +369,7 @@ export function CommandPalette({
     selectNote,
     refreshNotes,
     settings,
+    pinnedNotes,
     pinNote,
     unpinNote,
     focusMode,

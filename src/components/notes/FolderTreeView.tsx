@@ -252,7 +252,6 @@ interface FolderItemProps {
   collapsedFolders: Set<string>;
   onToggleCollapse: (path: string) => void;
   selectedNoteId: string | null;
-  pinnedIds: Set<string>;
   multiSelectedNoteIds: Set<string>;
   onNoteClick: (id: string, event: React.MouseEvent) => void;
   focusedItemKey: string | null;
@@ -274,7 +273,6 @@ const FolderItemComponent = memo(function FolderItem({
   collapsedFolders,
   onToggleCollapse,
   selectedNoteId,
-  pinnedIds,
   multiSelectedNoteIds,
   onNoteClick,
   focusedItemKey,
@@ -357,7 +355,6 @@ const FolderItemComponent = memo(function FolderItem({
                   onToggleCollapse={onToggleCollapse}
                   selectedNoteId={selectedNoteId}
                   focusedItemKey={focusedItemKey}
-                  pinnedIds={pinnedIds}
                   multiSelectedNoteIds={multiSelectedNoteIds}
                   onNoteClick={onNoteClick}
                   onCreateNoteHere={onCreateNoteHere}
@@ -379,7 +376,7 @@ const FolderItemComponent = memo(function FolderItem({
                   depth={depth + 1}
                   isSelected={selectedNoteId === note.id}
                   isMultiSelected={multiSelectedNoteIds.has(note.id)}
-                  isPinned={pinnedIds.has(note.id)}
+                  isPinned={note.isPinned}
                   onNoteClick={onNoteClick}
                   onPin={onPinNote}
                   onUnpin={onUnpinNote}
@@ -473,7 +470,6 @@ const FolderItemComponent = memo(function FolderItem({
 });
 
 interface FolderTreeViewProps {
-  pinnedIds: Set<string>;
   settings: Settings | null;
   multiSelectedNoteIds: Set<string>;
   setMultiSelectedNoteIds: React.Dispatch<React.SetStateAction<Set<string>>>;
@@ -482,7 +478,6 @@ interface FolderTreeViewProps {
 }
 
 export function FolderTreeView({
-  pinnedIds,
   settings: _settings,
   multiSelectedNoteIds,
   setMultiSelectedNoteIds,
@@ -534,8 +529,8 @@ export function FolderTreeView({
   }, [collapsedFolders]);
 
   const tree = useMemo(
-    () => buildFolderTree(notes, pinnedIds, knownFolders),
-    [notes, pinnedIds, knownFolders],
+    () => buildFolderTree(notes, knownFolders),
+    [notes, knownFolders],
   );
 
   const handleToggleCollapse = useCallback((path: string) => {
@@ -662,8 +657,8 @@ export function FolderTreeView({
 
   // Flat list of visible items for keyboard navigation
   const visibleItems = useMemo(
-    () => getVisibleItems(tree, pinnedIds, collapsedFolders),
-    [tree, pinnedIds, collapsedFolders],
+    () => getVisibleItems(tree, collapsedFolders),
+    [tree, collapsedFolders],
   );
 
   // Visible note IDs in order (for Shift+Click range computation)
@@ -837,12 +832,12 @@ export function FolderTreeView({
 
   // Separate pinned and unpinned root notes
   const pinnedRootNotes = useMemo(
-    () => tree.rootNotes.filter((n) => pinnedIds.has(n.id)),
-    [tree.rootNotes, pinnedIds],
+    () => tree.rootNotes.filter((n) => n.isPinned),
+    [tree.rootNotes],
   );
   const unpinnedRootNotes = useMemo(
-    () => tree.rootNotes.filter((n) => !pinnedIds.has(n.id)),
-    [tree.rootNotes, pinnedIds],
+    () => tree.rootNotes.filter((n) => !n.isPinned),
+    [tree.rootNotes],
   );
 
   return (
@@ -863,7 +858,7 @@ export function FolderTreeView({
             depth={0}
             isSelected={selectedNoteId === note.id}
             isMultiSelected={multiSelectedNoteIds.has(note.id)}
-            isPinned={true}
+            isPinned={note.isPinned}
             onNoteClick={handleNoteClick}
             onPin={pinNote}
             onUnpin={unpinNote}
@@ -883,7 +878,6 @@ export function FolderTreeView({
             onToggleCollapse={handleToggleCollapse}
             selectedNoteId={selectedNoteId}
             focusedItemKey={focusedItemKey}
-            pinnedIds={pinnedIds}
             multiSelectedNoteIds={multiSelectedNoteIds}
             onNoteClick={handleNoteClick}
             onCreateNoteHere={createNoteInFolder}
@@ -907,7 +901,7 @@ export function FolderTreeView({
             depth={0}
             isSelected={selectedNoteId === note.id}
             isMultiSelected={multiSelectedNoteIds.has(note.id)}
-            isPinned={false}
+            isPinned={note.isPinned}
             onNoteClick={handleNoteClick}
             onPin={pinNote}
             onUnpin={unpinNote}

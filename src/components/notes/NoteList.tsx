@@ -211,11 +211,9 @@ export function NoteList({
       });
   }, [notes]);
 
-  // Calculate pinned IDs set for efficient lookup
-  const pinnedIds = useMemo(
-    () => new Set(settings?.pinnedNoteIds || []),
-    [settings]
-  );
+  const refreshSettings = useCallback(() => {
+    notesService.getSettings().then(setSettings);
+  }, []);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (noteToDelete) {
@@ -232,10 +230,6 @@ export function NoteList({
   const openDeleteDialogForNote = useCallback((noteId: string) => {
     setNoteToDelete(noteId);
     setDeleteDialogOpen(true);
-  }, []);
-
-  const refreshSettings = useCallback(() => {
-    notesService.getSettings().then(setSettings);
   }, []);
 
   // Memoize display items to prevent recalculation on every render
@@ -305,7 +299,6 @@ export function NoteList({
     return (
       <>
         <FolderTreeView
-          pinnedIds={pinnedIds}
           settings={settings}
           multiSelectedNoteIds={multiSelectedNoteIds}
           setMultiSelectedNoteIds={setMultiSelectedNoteIds}
@@ -351,7 +344,7 @@ export function NoteList({
             key={item.id}
             id={item.id}
             isSelected={selectedNoteId === item.id}
-            isPinned={pinnedIds.has(item.id)}
+            isPinned={'isPinned' in item ? item.isPinned : false}
             onSelect={selectNote}
             onPin={pinNote}
             onUnpin={unpinNote}

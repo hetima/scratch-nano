@@ -23,6 +23,8 @@ pub struct NoteMetadata {
     pub title: String,
     pub preview: String,
     pub modified: i64,
+    #[serde(rename = "isPinned")]
+    pub is_pinned: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -106,14 +108,19 @@ pub struct AppConfig {
     pub notes_folder: Option<String>,
 }
 
-// Per-folder settings (stored in .scratch-nano/settings.json within notes folder)
+// Pinned notes (stored in pinned-files.json in app data directory)
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct PinnedNotes {
+    #[serde(rename = "pinnedNotePaths")]
+    pub pinned_note_paths: Vec<String>,
+}
+
+// App settings (stored in settings.json in app data directory)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Settings {
     pub theme: ThemeSettings,
     #[serde(rename = "editorFont")]
     pub editor_font: Option<EditorFontSettings>,
-    #[serde(rename = "pinnedNoteIds")]
-    pub pinned_note_ids: Option<Vec<String>>,
     #[serde(rename = "textDirection")]
     pub text_direction: Option<TextDirection>,
     #[serde(rename = "editorWidth")]
@@ -322,8 +329,9 @@ impl SearchIndex {
 
 // App state with improved structure
 pub struct AppState {
-    pub app_config: RwLock<AppConfig>,  // notes_folder path (stored in app data)
-    pub settings: RwLock<Settings>,      // per-folder settings (stored in .scratch-nano/)
+    pub app_config: RwLock<AppConfig>,      // notes_folder path
+    pub settings: RwLock<Settings>,          // app settings
+    pub pinned_notes: RwLock<PinnedNotes>,   // pinned note paths
     pub notes_cache: RwLock<HashMap<String, NoteMetadata>>,
     pub file_watcher: Mutex<Option<FileWatcherState>>,
     pub search_index: Mutex<Option<SearchIndex>>,
@@ -335,6 +343,7 @@ impl Default for AppState {
         Self {
             app_config: RwLock::new(AppConfig::default()),
             settings: RwLock::new(Settings::default()),
+            pinned_notes: RwLock::new(PinnedNotes::default()),
             notes_cache: RwLock::new(HashMap::new()),
             file_watcher: Mutex::new(None),
             search_index: Mutex::new(None),
@@ -770,6 +779,70 @@ fn save_settings(app: &AppHandle, settings: &Settings) -> Result<()> {
     Ok(())
 }
 
+// Get pinned notes file path (in app data directory)
+fn get_pinned_path(app: &AppHandle) -> Result<PathBuf> {
+    let app_data = app.path().app_data_dir()?;
+    std::fs::create_dir_all(&app_data)?;
+    Ok(app_data.join("pinned-files.json"))
+}
+
+// Load pinned notes from app data directory
+// (entries are absolute file paths since the full-path migration)
+fn load_pinned_notes(app: &AppHandle) -> PinnedNotes {
+    let path = match get_pinned_path(app) {
+        Ok(p) => p,
+        Err(_) => return PinnedNotes::default(),
+    };
+
+    if path.exists() {
+        std::fs::read_to_string(&path)
+            .ok()
+            .and_then(|content| serde_json::from_str(&content).ok())
+            .unwrap_or_default()
+    } else {
+        PinnedNotes::default()
+    }
+}
+
+// Save pinned notes to app data directory
+fn save_pinned_notes(app: &AppHandle, pinned: &PinnedNotes) -> Result<()> {
+    // Defensive: deduplicate before saving
+    // (normally handled at write sites, but guard here for safety)
+    let path = get_pinned_path(app)?;
+    let content = serde_json::to_string_pretty(pinned)?;
+    std::fs::write(path, content)?;
+    Ok(())
+}
+
+/// Migrate pinned paths that are relative (legacy) to absolute paths.
+/// Called once after AppState is managed and notes_folder is known.
+fn migrate_pinned_paths_to_absolute(app: &AppHandle, state: &AppState) {
+    let notes_folder = {
+        let cfg = state.app_config.read().expect("app_config read lock");
+        match cfg.notes_folder.clone() {
+            Some(f) => f,
+            None => return,
+        }
+    };
+    let folder_root = PathBuf::from(&notes_folder);
+
+    let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+    let mut changed = false;
+    for entry in pinned.pinned_note_paths.iter_mut() {
+        if PathBuf::from(&*entry).is_absolute() {
+            continue; // already absolute
+        }
+        // Legacy relative path ("folder/note") → absolute
+        if let Ok(abs) = abs_path_from_id(&folder_root, entry) {
+            *entry = abs.to_string_lossy().into_owned();
+            changed = true;
+        }
+    }
+    if changed {
+        let _ = save_pinned_notes(app, &pinned);
+    }
+}
+
 // Clean up old entries from debounce map (entries older than 5 seconds)
 fn cleanup_debounce_map(map: &Mutex<HashMap<PathBuf, Instant>>) {
     let mut map = map.lock().expect("debounce map mutex");
@@ -932,28 +1005,28 @@ async fn list_notes(state: State<'_, AppState>) -> Result<Vec<NoteMetadata>, Str
             title: String::new(),
             preview: String::new(),
             modified,
+            is_pinned: false, // filled in below
         })
         .collect();
 
-    // Load pinned note IDs from settings
-    let pinned_ids: HashSet<String> = {
-        let settings = state.settings.read().expect("settings read lock");
-        settings
-            .pinned_note_ids
-            .as_ref()
-            .map(|ids| ids.iter().cloned().collect())
-            .unwrap_or_default()
+    // Load pinned note absolute paths and mark each note
+    let pinned_paths: HashSet<String> = {
+        let pinned = state.pinned_notes.read().expect("pinned_notes read lock");
+        pinned.pinned_note_paths.iter().cloned().collect()
     };
 
-    // Sort: pinned notes first (by date), then unpinned notes (by date)
-    notes.sort_by(|a, b| {
-        let a_pinned = pinned_ids.contains(&a.id);
-        let b_pinned = pinned_ids.contains(&b.id);
+    for note in notes.iter_mut() {
+        if let Ok(abs) = abs_path_from_id(&path, &note.id) {
+            note.is_pinned = pinned_paths.contains(&abs.to_string_lossy().into_owned());
+        }
+    }
 
-        match (a_pinned, b_pinned) {
-            (true, false) => std::cmp::Ordering::Less,    // a pinned, b not -> a first
-            (false, true) => std::cmp::Ordering::Greater, // b pinned, a not -> b first
-            _ => b.modified.cmp(&a.modified),             // both same status -> sort by date (newest first)
+    // Sort: pinned notes first, then by date descending
+    notes.sort_by(|a, b| {
+        match (a.is_pinned, b.is_pinned) {
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => b.modified.cmp(&a.modified),
         }
     });
 
@@ -1081,7 +1154,7 @@ async fn save_note(
 }
 
 #[tauri::command]
-async fn delete_note(id: String, state: State<'_, AppState>) -> Result<(), String> {
+async fn delete_note(id: String, state: State<'_, AppState>, app: AppHandle) -> Result<(), String> {
     let folder = {
         let app_config = state.app_config.read().expect("app_config read lock");
         app_config
@@ -1096,6 +1169,17 @@ async fn delete_note(id: String, state: State<'_, AppState>) -> Result<(), Strin
         fs::remove_file(&file_path)
             .await
             .map_err(|e| e.to_string())?;
+    }
+
+    // Remove from pinned notes by absolute path
+    {
+        let abs_str = file_path.to_string_lossy().into_owned();
+        let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+        let before = pinned.pinned_note_paths.len();
+        pinned.pinned_note_paths.retain(|p| *p != abs_str);
+        if pinned.pinned_note_paths.len() != before {
+            let _ = save_pinned_notes(&app, &pinned);
+        }
     }
 
     // Update search index
@@ -1427,20 +1511,26 @@ async fn rename_folder(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Update pinned note IDs in settings
+    // Update pinned note paths (stored as absolute paths)
     {
-        let mut settings = state.settings.write().expect("settings write lock");
-        if let Some(ref mut pinned) = settings.pinned_note_ids {
-            for id in pinned.iter_mut() {
-                if id.starts_with(&old_prefix) {
-                    *id = format!("{}{}", new_prefix, &id[old_prefix.len()..]);
-                } else if *id == old_path {
-                    *id = new_path.clone();
-                }
+        let old_abs_prefix = format!("{}{}",
+            folder_root.join(old_path.replace('/', std::path::MAIN_SEPARATOR_STR)).to_string_lossy(),
+            std::path::MAIN_SEPARATOR);
+        let new_abs_prefix = format!("{}{}",
+            folder_root.join(new_path.replace('/', std::path::MAIN_SEPARATOR_STR)).to_string_lossy(),
+            std::path::MAIN_SEPARATOR);
+
+        let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+        let mut changed = false;
+        for p in pinned.pinned_note_paths.iter_mut() {
+            if p.starts_with(&old_abs_prefix) {
+                *p = format!("{}{}", new_abs_prefix, &p[old_abs_prefix.len()..]);
+                changed = true;
             }
         }
-        // Save settings
-        let _ = save_settings(&app, &settings);
+        if changed {
+            let _ = save_pinned_notes(&app, &pinned);
+        }
     }
 
     // Update cache
@@ -1529,17 +1619,21 @@ async fn move_note(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Update pinned note IDs
+    // Update pinned note paths (stored as absolute paths)
     {
-        let mut settings = state.settings.write().expect("settings write lock");
-        if let Some(ref mut pinned) = settings.pinned_note_ids {
-            for pin_id in pinned.iter_mut() {
-                if *pin_id == id {
-                    *pin_id = new_id.clone();
-                }
+        let old_abs = source_path.to_string_lossy().into_owned();
+        let new_abs = dest_path.to_string_lossy().into_owned();
+        let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+        let mut changed = false;
+        for p in pinned.pinned_note_paths.iter_mut() {
+            if *p == old_abs {
+                *p = new_abs.clone();
+                changed = true;
             }
         }
-        let _ = save_settings(&app, &settings);
+        if changed {
+            let _ = save_pinned_notes(&app, &pinned);
+        }
     }
 
     // Update cache
@@ -1635,17 +1729,21 @@ async fn move_folder(
         .await
         .map_err(|e| e.to_string())?;
 
-    // Update pinned note IDs
+    // Update pinned note paths (stored as absolute paths)
     {
-        let mut settings = state.settings.write().expect("settings write lock");
-        if let Some(ref mut pinned) = settings.pinned_note_ids {
-            for pin_id in pinned.iter_mut() {
-                if pin_id.starts_with(&old_prefix) {
-                    *pin_id = format!("{}{}", new_prefix, &pin_id[old_prefix.len()..]);
-                }
+        let old_abs_prefix = format!("{}{}", source.to_string_lossy(), std::path::MAIN_SEPARATOR);
+        let new_abs_prefix = format!("{}{}", dest.to_string_lossy(), std::path::MAIN_SEPARATOR);
+        let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+        let mut changed = false;
+        for p in pinned.pinned_note_paths.iter_mut() {
+            if p.starts_with(&old_abs_prefix) {
+                *p = format!("{}{}", new_abs_prefix, &p[old_abs_prefix.len()..]);
+                changed = true;
             }
         }
-        let _ = save_settings(&app, &settings);
+        if changed {
+            let _ = save_pinned_notes(&app, &pinned);
+        }
     }
 
     // Update cache
@@ -1701,6 +1799,62 @@ fn update_settings(
     let settings = state.settings.read().expect("settings read lock");
     save_settings(&app, &settings).map_err(|e| e.to_string())?;
 
+    Ok(())
+}
+
+#[tauri::command]
+fn get_pinned_notes(state: State<AppState>) -> PinnedNotes {
+    state.pinned_notes.read().expect("pinned_notes read lock").clone()
+}
+
+#[tauri::command]
+fn update_pinned_notes(
+    new_pinned: PinnedNotes,
+    state: State<AppState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    {
+        let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+        *pinned = new_pinned;
+    }
+
+    let pinned = state.pinned_notes.read().expect("pinned_notes read lock");
+    save_pinned_notes(&app, &pinned).map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+/// Pin a note by ID — stores its absolute path in pinned-files.json.
+#[tauri::command]
+fn pin_note(id: String, state: State<AppState>, app: AppHandle) -> Result<(), String> {
+    let folder = {
+        let cfg = state.app_config.read().expect("app_config read lock");
+        cfg.notes_folder.clone().ok_or("Notes folder not set")?
+    };
+    let abs_path = abs_path_from_id(&PathBuf::from(&folder), &id)?;
+    let abs_str = abs_path.to_string_lossy().into_owned();
+
+    let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+    if !pinned.pinned_note_paths.contains(&abs_str) {
+        pinned.pinned_note_paths.push(abs_str);
+        save_pinned_notes(&app, &pinned).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// Unpin a note by ID — removes its absolute path from pinned-files.json.
+#[tauri::command]
+fn unpin_note(id: String, state: State<AppState>, app: AppHandle) -> Result<(), String> {
+    let folder = {
+        let cfg = state.app_config.read().expect("app_config read lock");
+        cfg.notes_folder.clone().ok_or("Notes folder not set")?
+    };
+    let abs_path = abs_path_from_id(&PathBuf::from(&folder), &id)?;
+    let abs_str = abs_path.to_string_lossy().into_owned();
+
+    let mut pinned = state.pinned_notes.write().expect("pinned_notes write lock");
+    pinned.pinned_note_paths.retain(|p| *p != abs_str);
+    save_pinned_notes(&app, &pinned).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1910,6 +2064,7 @@ async fn import_file_to_folder(
         title: extracted_title,
         preview,
         modified,
+        is_pinned: false,
     };
 
     // Update notes cache so fallback search sees the imported note immediately
@@ -2808,12 +2963,19 @@ pub fn run() {
             let state = AppState {
                 app_config: RwLock::new(app_config),
                 settings: RwLock::new(settings),
+                pinned_notes: RwLock::new(load_pinned_notes(app.handle())),
                 notes_cache: RwLock::new(HashMap::new()),
                 file_watcher: Mutex::new(None),
                 search_index: Mutex::new(search_index),
                 debounce_map: Arc::new(Mutex::new(HashMap::new())),
             };
             app.manage(state);
+
+            // Migrate any legacy relative pinned paths to absolute paths
+            {
+                let state = app.state::<AppState>();
+                migrate_pinned_paths_to_absolute(app.handle(), &state);
+            }
 
             // Add notes folder to asset protocol scope so images can be served
             if let Some(ref folder) = app.state::<AppState>().app_config.read().expect("app_config read lock").notes_folder.clone() {
@@ -2890,6 +3052,10 @@ pub fn run() {
             move_folder,
             get_settings,
             update_settings,
+            get_pinned_notes,
+            update_pinned_notes,
+            pin_note,
+            unpin_note,
             preview_note_name,
             write_file,
             search_notes,

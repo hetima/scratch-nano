@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { Note, NoteMetadata, Settings } from "../types/note";
+import type { Note, NoteMetadata, Settings, PinnedNotes } from "../types/note";
 
 export async function getNotesFolder(): Promise<string | null> {
   return invoke("get_notes_folder");
@@ -70,6 +70,22 @@ export async function getSettings(): Promise<Settings> {
 
 export async function updateSettings(settings: Settings): Promise<void> {
   return invoke("update_settings", { newSettings: settings });
+}
+
+export async function getPinnedNotes(): Promise<PinnedNotes> {
+  return invoke("get_pinned_notes");
+}
+
+export async function updatePinnedNotes(pinned: PinnedNotes): Promise<void> {
+  return invoke("update_pinned_notes", { newPinned: pinned });
+}
+
+export async function pinNote(id: string): Promise<void> {
+  return invoke("pin_note", { id });
+}
+
+export async function unpinNote(id: string): Promise<void> {
+  return invoke("unpin_note", { id });
 }
 
 export interface SearchResult {

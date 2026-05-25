@@ -7,7 +7,6 @@ export interface FolderTreeData {
 
 export function buildFolderTree(
   notes: NoteMetadata[],
-  pinnedIds: Set<string>,
   knownFolders?: string[],
 ): FolderTreeData {
   const rootNotes: NoteMetadata[] = [];
@@ -54,9 +53,7 @@ export function buildFolderTree(
   function sortNode(node: FolderNode) {
     node.children.sort((a, b) => a.name.localeCompare(b.name));
     node.notes.sort((a, b) => {
-      const ap = pinnedIds.has(a.id);
-      const bp = pinnedIds.has(b.id);
-      if (ap !== bp) return ap ? -1 : 1;
+      if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
       return b.modified - a.modified;
     });
     node.children.forEach(sortNode);
@@ -70,9 +67,7 @@ export function buildFolderTree(
 
   // Sort root notes: pinned first, then by modified desc
   rootNotes.sort((a, b) => {
-    const ap = pinnedIds.has(a.id);
-    const bp = pinnedIds.has(b.id);
-    if (ap !== bp) return ap ? -1 : 1;
+    if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
     return b.modified - a.modified;
   });
 
@@ -86,14 +81,13 @@ export type TreeItem =
 /** Build a flat list of visible tree items in DFS order (for keyboard navigation). */
 export function getVisibleItems(
   tree: FolderTreeData,
-  pinnedIds: Set<string>,
   collapsedFolders: Set<string>,
 ): TreeItem[] {
   const items: TreeItem[] = [];
 
   // Pinned root notes first
   for (const note of tree.rootNotes) {
-    if (pinnedIds.has(note.id)) {
+    if (note.isPinned) {
       items.push({ type: "note", id: note.id });
     }
   }
@@ -116,7 +110,7 @@ export function getVisibleItems(
 
   // Unpinned root notes
   for (const note of tree.rootNotes) {
-    if (!pinnedIds.has(note.id)) {
+    if (!note.isPinned) {
       items.push({ type: "note", id: note.id });
     }
   }
