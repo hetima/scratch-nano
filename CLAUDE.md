@@ -2,7 +2,9 @@
 
 ## Project Overview
 
-Scratch Nano is a cross-platform markdown note-taking app for macOS, Windows, and Linux, built with Tauri v2 (Rust backend) + React/TypeScript/Tailwind (frontend) + marked (read-only markdown preview) + Tantivy (full-text search).
+Scratch Nano is a cross-platform markdown note-taking app for macOS, Windows, and Linux, built with Tauri v2 (Rust backend) + React 19/TypeScript/Tailwind CSS 4 (frontend) + CodeMirror 6 (edit mode) + marked v18 (preview mode) + Tantivy (full-text search).
+
+**Version:** 0.10.1
 
 ## Commands
 
@@ -15,25 +17,77 @@ pnpm tauri build      # Build production app
 
 ## CI
 
-Runs on every push to `main` and on PRs. Validates frontend build (`tsc` + Vite) and Rust compilation (`cargo check` + `cargo clippy`) on an Ubuntu runner.
+Triggered manually via `workflow_dispatch`. Validates frontend build (`tsc` + Vite) and Rust compilation (`cargo check` + `cargo clippy`) on Ubuntu 22.04.
+
+## Architecture
+
+### Frontend
+
+- **React 19** + TypeScript + Tailwind CSS 4 + Radix UI primitives
+- **State:** Two contexts — `NotesContext` (dual-context pattern) and `ThemeContext`
+- **Services:** `src/services/` wraps all Tauri commands (`notes.ts`, `files.ts`, `cli.ts`, `pdf.ts`)
+- **Types:** `src/types/note.ts` defines `NoteMetadata`, `Note`, `Settings`, `SearchResult`, `FolderNode`, etc.
+
+### Backend (src-tauri/src/lib.rs, ~3200 lines)
+
+39 Tauri commands grouped by domain:
+
+| Domain | Commands |
+|--------|----------|
+| Notes | `list_notes`, `read_note`, `save_note`, `create_note`, `delete_note`, `get_notes_folder`, `set_notes_folder` |
+| Folders | `list_folders`, `create_folder`, `delete_folder`, `rename_folder`, `move_folder` |
+| Note movement | `move_note` |
+| Pins | `get_pinned_notes`, `update_pinned_notes`, `pin_note`, `unpin_note` |
+| Settings | `get_settings`, `update_settings` |
+| Search | `search_notes`, `rebuild_search_index` |
+| File ops | `write_file`, `read_file_direct`, `save_file_direct`, `import_file_to_folder` |
+| System | `copy_to_clipboard`, `save_clipboard_image`, `copy_image_to_assets`, `open_folder_dialog`, `open_in_file_manager`, `open_url_safe`, `open_file_preview`, `preview_note_name`, `set_title_bar_theme` |
+| File watcher | `start_file_watcher` |
+| CLI | `get_cli_status`, `install_cli`, `uninstall_cli` |
+| Utility | `get_default_ignored_patterns` |
 
 ## Key Patterns
 
 - All backend operations go through Tauri commands in `src-tauri/src/lib.rs`. Frontend calls them via `invoke()` from `@tauri-apps/api/core`.
-- `NotesContext` uses a dual context pattern (data/actions separated) for performance.
-- Settings live in two places: app config at `{APP_DATA}/config.json`, per-folder settings at `{NOTES_FOLDER}/.scratch/settings.json`.
+- `NotesContext` uses a dual context pattern (`NotesDataContext` / `NotesActionsContext`) to prevent excessive re-renders. Data and actions are separated.
+- Settings persist to `{APP_DATA}/settings.json` via Tauri commands.
 - Tauri v2 permissions go in `src-tauri/capabilities/default.json`.
+- The file watcher uses `notify` crate; own saves are suppressed via `recentlySavedRef`.
+- Stale async requests are prevented with `selectRequestIdRef` / `pendingNewNoteIdRef` refs in `NotesContext`.
 
-## Editor Architecture (marked Preview)
+## Editor Architecture
 
-- The editor is a **read-only markdown preview** using `marked` (v18+) with GFM and breaks enabled. No editing or saving functionality exists in the editor component.
-- Markdown content is rendered via `marked.parse(content)` and displayed with `dangerouslySetInnerHTML` inside a `<div className="prose markdown-preview">`.
-- Source mode shows the raw markdown in a **readonly textarea**.
-- Font settings from `ThemeContext` are applied via CSS variables (`--editor-font-family`, `--editor-base-font-size`, `--editor-line-height`) as inline styles on the preview container.
-- Link handling: Cmd+Click on `<a>` tags in the preview opens external URLs via `@tauri-apps/plugin-opener`.
-- Note content is read only from `currentNote.content` (via `NotesContext` or `PreviewModeData`). The editor never writes back or saves.
-- `PreviewModeData` interface (in `Editor.tsx`) provides data for preview windows — no `save` callback.
-- CSS class `.markdown-preview` replaces the former `.ProseMirror` for layout (max-width) and print styles in `App.css`.
+The editor has two modes:
+
+**Edit mode** (`CodeMirrorEditor.tsx`)
+- Full CodeMirror 6 instance with markdown syntax support.
+- Slash commands (`/`) trigger quick-insert suggestions via `SlashCommand.tsx`.
+- Find/replace toolbar via `SearchToolbar.tsx`.
+- Math blocks rendered inline with KaTeX; diagrams rendered with Mermaid.
+- Link editing via `LinkEditor.tsx` modal.
+
+**Preview mode** (read-only)
+- `marked` v18 with GFM and breaks enabled.
+- Rendered via `marked.parse(content)` + `dangerouslySetInnerHTML` inside `<div className="prose markdown-preview">`.
+- Cmd+Click on links opens URLs via `@tauri-apps/plugin-opener`.
+- Code blocks have a copy button (`CodeCopyButton.tsx`).
+
+**Common:**
+- Font settings from `ThemeContext` apply via CSS variables (`--editor-font-family`, `--editor-base-font-size`, `--editor-line-height`).
+- `PreviewModeData` interface (in `Editor.tsx`) serves preview windows opened via drag-and-drop or "Open With".
+- `.markdown-preview` class handles max-width and print styles in `App.css`.
+
+## Key Components
+
+| Component | Purpose |
+|-----------|---------|
+| `Sidebar.tsx` | Note list, folder tree, search input |
+| `NoteList.tsx` | Scrollable, filterable note list with pinning |
+| `FolderTreeView.tsx` | Hierarchical folder tree with drag-and-drop (@dnd-kit) and context menu |
+| `CommandPalette.tsx` | Cmd+P command/action search |
+| `SettingsPage.tsx` | Tabbed settings UI (General, Editor, Tools, Shortcuts, About) |
+| `PreviewApp.tsx` | Standalone preview window (separate window mode) |
+| `KeyboardShortcutsModal.tsx` | Cmd+/ reference modal |
 
 ## Coding Conventions
 
@@ -50,7 +104,7 @@ Runs on every push to `main` and on PRs. Validates frontend build (`tsc` + Vite)
 ## Releasing
 
 1. Bump version in `package.json` and `src-tauri/Cargo.toml`
-2. Commit to `main`, then tag and push: `git tag v0.5.0 && git push origin v0.5.0`
-3. The release workflow builds all platforms and creates a draft GitHub release
+2. Commit to `main`, then tag and push: `git tag v0.10.1 && git push origin v0.10.1`
+3. The release workflow (`release.yml`) builds on macOS, Ubuntu, and Windows and creates a draft GitHub release
 4. Update the description in `latest.json` from GitHub after the action finishes
 5. Review, edit notes, and publish
