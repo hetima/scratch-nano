@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Scratch Nano is a cross-platform markdown note-taking app for macOS, Windows, and Linux, built with Tauri v2 (Rust backend) + React/TypeScript/Tailwind (frontend) + Milkdown Crepe (WYSIWYG editor) + Tantivy (full-text search).
+Scratch Nano is a cross-platform markdown note-taking app for macOS, Windows, and Linux, built with Tauri v2 (Rust backend) + React/TypeScript/Tailwind (frontend) + marked (read-only markdown preview) + Tantivy (full-text search).
 
 ## Commands
 
@@ -24,23 +24,16 @@ Runs on every push to `main` and on PRs. Validates frontend build (`tsc` + Vite)
 - Settings live in two places: app config at `{APP_DATA}/config.json`, per-folder settings at `{NOTES_FOLDER}/.scratch/settings.json`.
 - Tauri v2 permissions go in `src-tauri/capabilities/default.json`.
 
-## Editor Architecture (Milkdown Crepe)
+## Editor Architecture (marked Preview)
 
-- The WYSIWYG editor uses **Milkdown Crepe** (`@milkdown/crepe`), a high-level API that bundles toolbar, CodeMirror, table, list, link tooltip, latex, and slash command features by default.
-- React integration via `@milkdown/react`: use `MilkdownProvider` + `useEditor` hook. Pattern: `useEditor((root) => new Crepe({ root, defaultValue }))`.
-- **Critical**: Milkdown's `Editor` class does NOT expose `view` or `state` properties directly. Always access ProseMirror EditorView/State through the context pattern:
-  ```ts
-  editor.action((ctx) => {
-    const view = ctx.get(editorViewCtx);
-    const state = view.state;
-  });
-  ```
-  Or from outside: `editor.ctx.get(editorViewCtx)`.
-- Content replacement uses `editor.action((ctx) => { ... state.tr.replace(0, state.doc.content.size, new Slice(doc.content, 0, 0)) })` with `parserCtx` and `editorViewCtx`.
-- `Crepe` instance provides convenience methods: `crepe.getMarkdown()`, `crepe.editor` (the underlying Editor), `crepe.setReadonly(value)`.
-- The `editorRef` passed to parent components holds a `Crepe` instance (not `Editor`). Use `editorRef.current?.editor` to get the `Editor`.
-- CSS imports required: `@milkdown/crepe/theme/common/style.css` + `@milkdown/crepe/theme/nord.css`.
-- **Deprecated files** (stubbed with `@ts-nocheck`, safe to delete): `CodeBlockView.tsx`, `Frontmatter.ts`, `lowlight.ts`, `MermaidRenderer.tsx`, `SlashCommand.tsx`, `SlashCommandList.tsx`, `SuggestionList.tsx`, `BlockMathEditor.tsx`, `MathExtensions.ts`. These were TipTap-specific and are replaced by Milkdown Crepe's built-in features.
+- The editor is a **read-only markdown preview** using `marked` (v18+) with GFM and breaks enabled. No editing or saving functionality exists in the editor component.
+- Markdown content is rendered via `marked.parse(content)` and displayed with `dangerouslySetInnerHTML` inside a `<div className="prose markdown-preview">`.
+- Source mode shows the raw markdown in a **readonly textarea**.
+- Font settings from `ThemeContext` are applied via CSS variables (`--editor-font-family`, `--editor-base-font-size`, `--editor-line-height`) as inline styles on the preview container.
+- Link handling: Cmd+Click on `<a>` tags in the preview opens external URLs via `@tauri-apps/plugin-opener`.
+- Note content is read only from `currentNote.content` (via `NotesContext` or `PreviewModeData`). The editor never writes back or saves.
+- `PreviewModeData` interface (in `Editor.tsx`) provides data for preview windows — no `save` callback.
+- CSS class `.markdown-preview` replaces the former `.ProseMirror` for layout (max-width) and print styles in `App.css`.
 
 ## Coding Conventions
 
@@ -50,7 +43,7 @@ Runs on every push to `main` and on PRs. Validates frontend build (`tsc` + Vite)
 - No commented-out code or TODOs in production code
 - Use `React.memo` for expensive list-item components
 - Use `useCallback`/`useMemo` for performance-critical paths
-- Debounce user-triggered operations (auto-save 300ms, search 150ms, file watcher 500ms)
+- Debounce user-triggered operations (search 150ms, file watcher 500ms)
 - All operations should be non-blocking (async)
 - Error handling with user-friendly messages
 
