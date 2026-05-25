@@ -2702,9 +2702,12 @@ async fn open_in_file_manager(path: String) -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        let windows_path = path.replace("/", "\\");
-        std::process::Command::new("explorer")
-            .arg(&windows_path)
+        let mut windows_path = path.replace("/", "\\");
+        if !windows_path.ends_with('\\') {
+            windows_path.push('\\');
+        }
+        std::process::Command::new("pwsh")
+            .args(["-NoProfile", "-Command", &format!("Start-Process \"{}\"", windows_path.replace('"', "`\""))])
             .spawn()
             .map_err(|e| e.to_string())?;
     }
