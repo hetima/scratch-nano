@@ -12,8 +12,9 @@ import { toast } from "sonner";
 import { mod, shift, isMac } from "../../lib/platform";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useOptionalNotes } from "../../context/NotesContext";
-import { useTheme } from "../../context/ThemeContext";
+import { useTheme, getFontFamilyValue } from "../../context/ThemeContext";
 import { EditorWidthHandles } from "./EditorWidthHandle";
+import { CodeMirrorEditor } from "./CodeMirrorEditor";
 import { cn } from "../../lib/utils";
 import { plainTextFromMarkdown } from "../../lib/plainText";
 import { Button, IconButton, Tooltip } from "../ui";
@@ -92,6 +93,7 @@ export function Editor({
     : (notesCtx?.currentNote ?? null);
 
   const createNote = notesCtx?.createNote;
+  const saveNote = notesCtx?.saveNote;
   const hasExternalChanges = previewMode
     ? previewMode.hasExternalChanges
     : notesCtx!.hasExternalChanges;
@@ -101,7 +103,8 @@ export function Editor({
   const pinNote = notesCtx?.pinNote;
   const unpinNote = notesCtx?.unpinNote;
   const notes = notesCtx?.notes;
-  const { textDirection } = useTheme();
+  const { textDirection, resolvedTheme, editorFontSettings: fonts } = useTheme();
+  const isDark = resolvedTheme === "dark";
 
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -610,24 +613,23 @@ export function Editor({
               dangerouslySetInnerHTML={{ __html: renderedHtml }}
             />
           )}
-          {/* Source mode — readonly textarea */}
+          {/* Source mode — CodeMirror editor */}
           {sourceMode && (
-            <textarea
-              value={currentNote.content}
-              readOnly
-              wrap="off"
-              dir={textDirection}
-              className="w-full h-full bg-transparent text-text focus:outline-none resize-none px-6 pt-8 pb-24 mx-auto block"
-              style={{
-                maxWidth: "var(--editor-max-width, 48rem)",
-                fontFamily:
-                  "ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Monaco, 'Courier New', monospace",
-                fontSize: "0.875em",
-                lineHeight: "var(--editor-line-height)",
-                tabSize: 2,
-              }}
-              spellCheck={false}
-            />
+            <div className="absolute inset-0" dir={textDirection}>
+              <CodeMirrorEditor
+                content={currentNote.content}
+                onSave={(newContent) => {
+                  if (saveNote) {
+                    saveNote(newContent, currentNote.id);
+                  }
+                }}
+                fontFamily={getFontFamilyValue(fonts.baseFontFamily)}
+                fontSize={fonts.baseFontSize}
+                lineHeight={fonts.lineHeight}
+                textDirection={textDirection}
+                isDark={isDark}
+              />
+            </div>
           )}
         </div>
       </div>

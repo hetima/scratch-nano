@@ -21,7 +21,7 @@ import type {
 type ThemeMode = "light" | "dark" | "system";
 
 // Font family CSS values
-function getFontFamilyValue(fontFamily: string): string {
+export function getFontFamilyValue(fontFamily: string): string {
   switch (fontFamily) {
     case "system-sans":
       return '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
