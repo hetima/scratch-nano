@@ -425,6 +425,12 @@ html.dark {
   overflow-x: auto;
 }
 
+.code-wrap-enabled .code-block-wrapper pre {
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  overflow-x: hidden;
+}
+
 .code-block-wrapper pre code {
   background-color: transparent;
   color: var(--color-text);

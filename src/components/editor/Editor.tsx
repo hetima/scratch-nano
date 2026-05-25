@@ -119,7 +119,7 @@ export function Editor({
   const pinNote = notesCtx?.pinNote;
   const unpinNote = notesCtx?.unpinNote;
   const notes = notesCtx?.notes;
-  const { textDirection, resolvedTheme, editorFontSettings: fonts } = useTheme();
+  const { textDirection, resolvedTheme, editorFontSettings: fonts, showLineNumbers } = useTheme();
   const isDark = resolvedTheme === "dark";
 
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
@@ -715,6 +715,7 @@ export function Editor({
                 codeFontFamily={getFontFamilyValue(fonts.codeFontFamily)}
                 textDirection={textDirection}
                 isDark={isDark}
+                showLineNumbers={showLineNumbers}
               />
             </div>
           )}

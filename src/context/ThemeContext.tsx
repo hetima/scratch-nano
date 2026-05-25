@@ -127,6 +127,10 @@ interface ThemeContextType {
   setCustomColor: (mode: "light" | "dark", key: ThemeColorKey, value: string) => void;
   resetCustomColor: (mode: "light" | "dark", key: ThemeColorKey) => void;
   resetAllCustomColors: (mode: "light" | "dark") => void;
+  showLineNumbers: boolean;
+  setShowLineNumbers: (value: boolean) => void;
+  wrapCodeBlocks: boolean;
+  setWrapCodeBlocks: (value: boolean) => void;
 }
 
 const ThemeContext = createContext<ThemeContextType | null>(null);
@@ -203,6 +207,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   );
   const [customColorsLight, setCustomColorsLightState] = useState<CustomColors>({});
   const [customColorsDark, setCustomColorsDarkState] = useState<CustomColors>({});
+  const [showLineNumbers, setShowLineNumbersState] = useState(false);
+  const [wrapCodeBlocks, setWrapCodeBlocksState] = useState(true);
   const [isInitialized, setIsInitialized] = useState(false);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">(() => {
@@ -261,6 +267,12 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
       }
       if (settings.customColorsDark) {
         setCustomColorsDarkState(settings.customColorsDark);
+      }
+      if (typeof settings.showLineNumbers === "boolean") {
+        setShowLineNumbersState(settings.showLineNumbers);
+      }
+      if (typeof settings.wrapCodeBlocks === "boolean") {
+        setWrapCodeBlocksState(settings.wrapCodeBlocks);
       }
     } catch {
       // If settings can't be loaded, use defaults
@@ -558,6 +570,38 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     [],
   );
 
+  // Save and set show line numbers
+  const setShowLineNumbers = useCallback(async (value: boolean) => {
+    setShowLineNumbersState(value);
+    try {
+      const settings = await getSettings();
+      await updateSettings({ ...settings, showLineNumbers: value });
+    } catch (error) {
+      console.error("Failed to save showLineNumbers:", error);
+    }
+  }, []);
+
+  // Apply wrap code blocks class to document root
+  useEffect(() => {
+    const root = document.documentElement;
+    if (wrapCodeBlocks) {
+      root.classList.add("code-wrap-enabled");
+    } else {
+      root.classList.remove("code-wrap-enabled");
+    }
+  }, [wrapCodeBlocks]);
+
+  // Save and set wrap code blocks
+  const setWrapCodeBlocks = useCallback(async (value: boolean) => {
+    setWrapCodeBlocksState(value);
+    try {
+      const settings = await getSettings();
+      await updateSettings({ ...settings, wrapCodeBlocks: value });
+    } catch (error) {
+      console.error("Failed to save wrapCodeBlocks:", error);
+    }
+  }, []);
+
   // Live CSS variable update during drag (no persistence)
   const setEditorMaxWidthLive = useCallback((value: string) => {
     document.documentElement.style.setProperty("--editor-max-width", value);
@@ -593,6 +637,10 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
         setCustomColor,
         resetCustomColor,
         resetAllCustomColors,
+        showLineNumbers,
+        setShowLineNumbers,
+        wrapCodeBlocks,
+        setWrapCodeBlocks,
       }}
     >
       {children}

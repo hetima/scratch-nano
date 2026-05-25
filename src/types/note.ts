@@ -68,6 +68,8 @@ export interface Settings {
   ignoredPatterns?: string[];
   customColorsLight?: CustomColors;
   customColorsDark?: CustomColors;
+  showLineNumbers?: boolean;
+  wrapCodeBlocks?: boolean;
 }
 
 export interface FolderNode {

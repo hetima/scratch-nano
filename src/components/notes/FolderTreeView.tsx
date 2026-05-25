@@ -65,7 +65,6 @@ interface FileItemProps {
   note: NoteMetadata;
   depth: number;
   isSelected: boolean;
-  isMultiSelected: boolean;
   isPinned: boolean;
   onNoteClick: (id: string, event: React.MouseEvent) => void;
   onPin: (id: string) => Promise<void>;
@@ -73,14 +72,13 @@ interface FileItemProps {
   onDuplicate: (id: string) => Promise<void>;
   onDelete: (id: string) => void;
   onMoveToParent?: (id: string, targetFolder: string) => void;
-  focusedItemKey?: string | null;
+  isFocused: boolean;
 }
 
 const FileItem = memo(function FileItem({
   note,
   depth,
   isSelected,
-  isMultiSelected,
   isPinned,
   onNoteClick,
   onPin,
@@ -88,7 +86,7 @@ const FileItem = memo(function FileItem({
   onDuplicate,
   onDelete,
   onMoveToParent,
-  focusedItemKey,
+  isFocused,
 }: FileItemProps) {
   const itemRef = useRef<HTMLDivElement>(null);
   const handleClick = useCallback(
@@ -160,12 +158,11 @@ const FileItem = memo(function FileItem({
               ? "opacity-40"
               : isOver
                 ? "bg-accent/10 ring-1 ring-accent"
-                : isSelected &&
-                    (!focusedItemKey || focusedItemKey === `note:${note.id}`)
-                  ? "bg-bg-muted group-focus/notelist:ring-1 group-focus/notelist:ring-text-muted"
-                  : isMultiSelected
-                    ? "bg-bg-muted"
-                    : "hover:bg-bg-muted"
+                : isSelected
+                  ? isFocused
+                    ? "bg-bg-muted group-focus/notelist:ring-1 group-focus/notelist:ring-text-muted"
+                    : "bg-bg-muted"
+                  : "hover:bg-bg-muted"
           }`}
           style={{ paddingLeft: `${depth * 12 + 8}px`, paddingRight: "8px" }}
           onClick={handleClick}
@@ -253,7 +250,7 @@ interface FolderItemProps {
   collapsedFolders: Set<string>;
   onToggleCollapse: (path: string) => void;
   selectedNoteId: string | null;
-  multiSelectedNoteIds: Set<string>;
+  focusedNoteId: string | null;
   onNoteClick: (id: string, event: React.MouseEvent) => void;
   focusedItemKey: string | null;
   onCreateNoteHere: (path: string) => void;
@@ -274,7 +271,7 @@ const FolderItemComponent = memo(function FolderItem({
   collapsedFolders,
   onToggleCollapse,
   selectedNoteId,
-  multiSelectedNoteIds,
+  focusedNoteId,
   onNoteClick,
   focusedItemKey,
   onCreateNoteHere,
@@ -355,8 +352,8 @@ const FolderItemComponent = memo(function FolderItem({
                   collapsedFolders={collapsedFolders}
                   onToggleCollapse={onToggleCollapse}
                   selectedNoteId={selectedNoteId}
+                  focusedNoteId={focusedNoteId}
                   focusedItemKey={focusedItemKey}
-                  multiSelectedNoteIds={multiSelectedNoteIds}
                   onNoteClick={onNoteClick}
                   onCreateNoteHere={onCreateNoteHere}
                   onNewSubfolder={onNewSubfolder}
@@ -376,7 +373,6 @@ const FolderItemComponent = memo(function FolderItem({
                   note={note}
                   depth={depth + 1}
                   isSelected={selectedNoteId === note.id}
-                  isMultiSelected={multiSelectedNoteIds.has(note.id)}
                   isPinned={note.isPinned}
                   onNoteClick={onNoteClick}
                   onPin={onPinNote}
@@ -384,7 +380,7 @@ const FolderItemComponent = memo(function FolderItem({
                   onDuplicate={onDuplicateNote}
                   onDelete={onDeleteNote}
                   onMoveToParent={onMoveNoteToParent}
-                  focusedItemKey={focusedItemKey}
+                  isFocused={focusedNoteId === note.id}
                 />
               ))}
               {isEmpty && (
@@ -474,16 +470,12 @@ interface FolderTreeViewProps {
   settings: Settings | null;
   multiSelectedNoteIds: Set<string>;
   setMultiSelectedNoteIds: React.Dispatch<React.SetStateAction<Set<string>>>;
-  lastClickedNoteId: string | null;
-  setLastClickedNoteId: React.Dispatch<React.SetStateAction<string | null>>;
 }
 
 export function FolderTreeView({
   settings: _settings,
   multiSelectedNoteIds,
   setMultiSelectedNoteIds,
-  lastClickedNoteId,
-  setLastClickedNoteId,
 }: FolderTreeViewProps) {
   const {
     notes,
@@ -674,73 +666,15 @@ export function FolderTreeView({
   );
 
   const handleNoteClick = useCallback(
-    (noteId: string, event: React.MouseEvent) => {
-      const isMeta = event.metaKey || event.ctrlKey;
-      const isShift = event.shiftKey;
-
-      if (isShift) {
-        // Range select from anchor to target
-        const anchor = lastClickedNoteId ?? selectedNoteId;
-        if (anchor) {
-          let anchorIdx = visibleNoteIds.indexOf(anchor);
-          // Fallback to selectedNoteId if anchor is no longer visible
-          if (anchorIdx === -1 && selectedNoteId) {
-            anchorIdx = visibleNoteIds.indexOf(selectedNoteId);
-          }
-          const targetIdx = visibleNoteIds.indexOf(noteId);
-          if (anchorIdx !== -1 && targetIdx !== -1) {
-            const start = Math.min(anchorIdx, targetIdx);
-            const end = Math.max(anchorIdx, targetIdx);
-            const range = new Set(visibleNoteIds.slice(start, end + 1));
-            // Ensure the active note is part of the selection
-            if (selectedNoteId) range.add(selectedNoteId);
-            setMultiSelectedNoteIds(range);
-          }
-        }
-        // Don't change editor note on Shift+Click
-      } else if (isMeta) {
-        // Toggle individual note in selection
-        setMultiSelectedNoteIds((prev) => {
-          const next = new Set(prev);
-          // Ensure the active note joins the selection
-          if (selectedNoteId && !next.has(selectedNoteId)) {
-            next.add(selectedNoteId);
-          }
-          if (next.has(noteId)) {
-            next.delete(noteId);
-          } else {
-            next.add(noteId);
-          }
-          return next;
-        });
-        setLastClickedNoteId(noteId);
-        // Don't change editor note on Cmd+Click
-      } else {
-        // Plain click: reset selection, open in editor
-        setMultiSelectedNoteIds(new Set([noteId]));
-        setLastClickedNoteId(noteId);
-        selectNote(noteId);
-      }
+    (noteId: string, _event: React.MouseEvent) => {
+      setMultiSelectedNoteIds(new Set([noteId]));
+      selectNote(noteId);
     },
-    [
-      lastClickedNoteId,
-      visibleNoteIds,
-      selectedNoteId,
-      setMultiSelectedNoteIds,
-      setLastClickedNoteId,
-      selectNote,
-    ],
+    [setMultiSelectedNoteIds, selectNote],
   );
 
-  // Track which item is focused for keyboard nav (separate from note selection)
+  // Track focused tree item key for folder focus ring (notes use selectedNoteId)
   const [focusedItemKey, setFocusedItemKey] = useState<string | null>(null);
-
-  // Sync focused item when note selection changes
-  useEffect(() => {
-    if (selectedNoteId) {
-      setFocusedItemKey(`note:${selectedNoteId}`);
-    }
-  }, [selectedNoteId]);
 
   const itemKey = (item: TreeItem) =>
     item.type === "note" ? `note:${item.id}` : `folder:${item.path}`;
@@ -757,14 +691,7 @@ export function FolderTreeView({
       }
 
       if (e.key === "Escape") {
-        if (multiSelectedNoteIds.size > 1) {
-          // First Escape: clear multi-selection and reset range anchor
-          setMultiSelectedNoteIds(new Set());
-          setLastClickedNoteId(null);
-        } else {
-          // Second Escape: blur and let App.tsx handle
-          containerRef.current?.blur();
-        }
+        containerRef.current?.blur();
         return;
       }
 
@@ -772,9 +699,11 @@ export function FolderTreeView({
       e.preventDefault();
       e.stopPropagation();
 
-      const currentIndex = visibleItems.findIndex(
-        (item) => itemKey(item) === focusedItemKey,
-      );
+      // Current position: prefer focusedItemKey, fall back to selected note
+      const currentKey = focusedItemKey ?? (selectedNoteId ? `note:${selectedNoteId}` : null);
+      const currentIndex = currentKey
+        ? visibleItems.findIndex((item) => itemKey(item) === currentKey)
+        : -1;
 
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         let newIndex: number;
@@ -789,6 +718,7 @@ export function FolderTreeView({
         setFocusedItemKey(itemKey(item));
         if (item.type === "note") {
           selectNote(item.id);
+          setMultiSelectedNoteIds(new Set([item.id]));
         }
       } else if (e.key === "Enter") {
         if (currentIndex < 0) return;
@@ -796,7 +726,6 @@ export function FolderTreeView({
         if (item.type === "folder") {
           handleToggleCollapse(item.path);
         } else {
-          // Focus the editor
           const editor = document.querySelector(".ProseMirror") as HTMLElement;
           if (editor) editor.focus();
         }
@@ -805,11 +734,10 @@ export function FolderTreeView({
     [
       visibleItems,
       focusedItemKey,
+      selectedNoteId,
       selectNote,
       handleToggleCollapse,
-      multiSelectedNoteIds,
       setMultiSelectedNoteIds,
-      setLastClickedNoteId,
     ],
   );
 
@@ -817,19 +745,10 @@ export function FolderTreeView({
   useEffect(() => {
     const handleFocus = () => {
       containerRef.current?.focus();
-      // If nothing focused yet, focus the selected note or first item
-      if (!focusedItemKey && visibleItems.length > 0) {
-        const selected = visibleItems.find(
-          (item) => item.type === "note" && item.id === selectedNoteId,
-        );
-        setFocusedItemKey(
-          selected ? itemKey(selected) : itemKey(visibleItems[0]),
-        );
-      }
     };
     window.addEventListener("focus-note-list", handleFocus);
     return () => window.removeEventListener("focus-note-list", handleFocus);
-  }, [focusedItemKey, visibleItems, selectedNoteId]);
+  }, []);
 
   // Separate pinned and unpinned root notes
   const pinnedRootNotes = useMemo(
@@ -858,14 +777,13 @@ export function FolderTreeView({
             note={note}
             depth={0}
             isSelected={selectedNoteId === note.id}
-            isMultiSelected={multiSelectedNoteIds.has(note.id)}
             isPinned={note.isPinned}
             onNoteClick={handleNoteClick}
             onPin={pinNote}
             onUnpin={unpinNote}
             onDuplicate={duplicateNote}
             onDelete={openDeleteNoteDialog}
-            focusedItemKey={focusedItemKey}
+            isFocused={focusedItemKey === `note:${note.id}`}
           />
         ))}
 
@@ -878,8 +796,8 @@ export function FolderTreeView({
             collapsedFolders={collapsedFolders}
             onToggleCollapse={handleToggleCollapse}
             selectedNoteId={selectedNoteId}
+            focusedNoteId={focusedItemKey?.startsWith("note:") ? focusedItemKey.slice(5) : selectedNoteId}
             focusedItemKey={focusedItemKey}
-            multiSelectedNoteIds={multiSelectedNoteIds}
             onNoteClick={handleNoteClick}
             onCreateNoteHere={createNoteInFolder}
             onNewSubfolder={handleNewSubfolder}
@@ -901,14 +819,13 @@ export function FolderTreeView({
             note={note}
             depth={0}
             isSelected={selectedNoteId === note.id}
-            isMultiSelected={multiSelectedNoteIds.has(note.id)}
             isPinned={note.isPinned}
             onNoteClick={handleNoteClick}
             onPin={pinNote}
             onUnpin={unpinNote}
             onDuplicate={duplicateNote}
             onDelete={openDeleteNoteDialog}
-            focusedItemKey={focusedItemKey}
+            isFocused={focusedItemKey === `note:${note.id}`}
           />
         ))}
       </div>

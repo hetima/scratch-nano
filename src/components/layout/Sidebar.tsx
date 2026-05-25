@@ -54,7 +54,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
   const [dragLabel, setDragLabel] = useState<string | null>(null);
   const [dragCount, setDragCount] = useState(1);
   const [multiSelectedNoteIds, setMultiSelectedNoteIds] = useState<Set<string>>(new Set());
-  const [lastClickedNoteId, setLastClickedNoteId] = useState<string | null>(null);
   const debounceRef = useRef<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const multiSelectedRef = useRef(multiSelectedNoteIds) as RefObject<Set<string>>;
@@ -226,7 +225,10 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
           clearSearch();
         }
       } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-        // Only navigate when showing a flat list (searching, or folders disabled)
+        // TODO: folder tree view has its own display order (hierarchy) that differs from
+        // the notes array (date order), so arrow navigation is disabled when the tree is
+        // visible. To support it, FolderTreeView would need to expose its visible node
+        // order via a ref or callback.
         if (foldersEnabled && !searchQuery.trim()) return;
         e.preventDefault();
         const displayItems = searchQuery.trim()
@@ -400,8 +402,6 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
         <NoteList
           multiSelectedNoteIds={multiSelectedNoteIds}
           setMultiSelectedNoteIds={setMultiSelectedNoteIds}
-          lastClickedNoteId={lastClickedNoteId}
-          setLastClickedNoteId={setLastClickedNoteId}
         />
       </div>
 
@@ -420,7 +420,7 @@ export function Sidebar({ onOpenSettings }: SidebarProps) {
     </div>
 
     {/* Drag overlay — floating label while dragging */}
-    <DragOverlay>
+    <DragOverlay dropAnimation={null}>
       {dragLabel && (
         <div className="flex items-center gap-1.5 px-3 py-1.5 bg-bg border border-border rounded-md shadow-lg text-sm text-text">
           <NoteIcon className="w-3.5 h-3.5 stroke-[1.6] opacity-50 shrink-0" />

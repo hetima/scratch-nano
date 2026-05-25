@@ -3,6 +3,8 @@ import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirro
 import { EditorState, Compartment } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
+import { syntaxHighlighting, HighlightStyle } from "@codemirror/language";
+import { tags } from "@lezer/highlight";
 
 interface CodeMirrorEditorProps {
   content: string;
@@ -14,6 +16,7 @@ interface CodeMirrorEditorProps {
   codeFontFamily: string;
   textDirection: "ltr" | "rtl" | "auto";
   isDark: boolean;
+  showLineNumbers?: boolean;
 }
 
 function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, codeFontFamily: string, isDark: boolean) {
@@ -82,6 +85,12 @@ function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, co
   );
 }
 
+function buildCodeFontHighlight(codeFontFamily: string) {
+  return syntaxHighlighting(
+    HighlightStyle.define([{ tag: tags.monospace, fontFamily: codeFontFamily }]),
+  );
+}
+
 export function CodeMirrorEditor({
   content,
   onSave,
@@ -92,10 +101,13 @@ export function CodeMirrorEditor({
   codeFontFamily,
   textDirection,
   isDark,
+  showLineNumbers = false,
 }: CodeMirrorEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const themeCompartment = useRef(new Compartment());
+  const lineNumbersCompartment = useRef(new Compartment());
+  const codeFontCompartment = useRef(new Compartment());
   // Track the content we last set from outside, to avoid clobbering user edits
   // and to know when a save is actually needed
   const lastSetContent = useRef(content);
@@ -126,12 +138,13 @@ export function CodeMirrorEditor({
       doc: content,
       extensions: [
         markdown(),
-        lineNumbers(),
+        lineNumbersCompartment.current.of(showLineNumbers ? lineNumbers() : []),
         highlightActiveLine(),
         history(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         saveKeymap,
         themeCompartment.current.of(buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark)),
+        codeFontCompartment.current.of(buildCodeFontHighlight(codeFontFamily)),
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
@@ -174,11 +187,27 @@ export function CodeMirrorEditor({
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
-      effects: themeCompartment.current.reconfigure(
-        buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark),
-      ),
+      effects: [
+        themeCompartment.current.reconfigure(
+          buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark),
+        ),
+        codeFontCompartment.current.reconfigure(
+          buildCodeFontHighlight(codeFontFamily),
+        ),
+      ],
     });
   }, [fontFamily, fontSize, lineHeight, codeFontFamily, isDark]);
+
+  // Update line numbers when setting changes
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+    view.dispatch({
+      effects: lineNumbersCompartment.current.reconfigure(
+        showLineNumbers ? lineNumbers() : [],
+      ),
+    });
+  }, [showLineNumbers]);
 
   return (
     <div

@@ -129,6 +129,10 @@ export function AppearanceSettingsSection() {
     setCustomColor,
     resetCustomColor,
     resetAllCustomColors,
+    showLineNumbers,
+    setShowLineNumbers,
+    wrapCodeBlocks,
+    setWrapCodeBlocks,
   } = useTheme();
 
   // Build font options for combobox
@@ -432,6 +436,20 @@ export function AppearanceSettingsSection() {
               />
             </div>
           </div>
+
+          {/* Wrap Code Blocks */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium" htmlFor="wrap-code-blocks">
+              Wrap Code Blocks
+            </label>
+            <input
+              id="wrap-code-blocks"
+              type="checkbox"
+              checked={wrapCodeBlocks}
+              onChange={(e) => setWrapCodeBlocks(e.target.checked)}
+              className="w-4 h-4 accent-accent cursor-pointer"
+            />
+          </div>
         </div>
       </section>
 
@@ -479,6 +497,20 @@ export function AppearanceSettingsSection() {
                 onBlur={(raw) => handleNumericBlur("editLineHeight", 1.0, 2.5, raw)}
               />
             </div>
+          </div>
+
+          {/* Show Line Numbers */}
+          <div className="flex items-center justify-between">
+            <label className="text-sm text-text font-medium" htmlFor="show-line-numbers">
+              Show Line Numbers
+            </label>
+            <input
+              id="show-line-numbers"
+              type="checkbox"
+              checked={showLineNumbers}
+              onChange={(e) => setShowLineNumbers(e.target.checked)}
+              className="w-4 h-4 accent-accent cursor-pointer"
+            />
           </div>
         </div>
       </section>
