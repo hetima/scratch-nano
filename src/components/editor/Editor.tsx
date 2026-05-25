@@ -705,7 +705,7 @@ export function Editor({
           <div
             className="absolute inset-0"
             dir={textDirection}
-            style={{ display: sourceMode ? undefined : "none" }}
+            style={sourceMode ? undefined : { visibility: "hidden", pointerEvents: "none" }}
           >
             <CodeMirrorEditor
               content={liveContent ?? currentNote.content}
@@ -727,7 +727,7 @@ export function Editor({
               textDirection={textDirection}
               isDark={isDark}
               showLineNumbers={showLineNumbers}
-              isVisible={sourceMode}
+              scrollResetKey={currentNote.id}
             />
           </div>
         </div>

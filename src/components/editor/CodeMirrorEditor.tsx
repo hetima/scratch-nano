@@ -17,7 +17,7 @@ interface CodeMirrorEditorProps {
   textDirection: "ltr" | "rtl" | "auto";
   isDark: boolean;
   showLineNumbers?: boolean;
-  isVisible?: boolean;
+  scrollResetKey?: string;
 }
 
 function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, codeFontFamily: string, isDark: boolean) {
@@ -32,9 +32,7 @@ function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, co
       ".cm-content": {
         fontFamily,
         lineHeight: String(lineHeight),
-        padding: "2rem 1.5rem 6rem",
-        maxWidth: "var(--editor-max-width, 48rem)",
-        margin: "0 auto",
+        padding: "2rem max(1.5rem, calc((100% - var(--editor-max-width, 48rem)) / 2)) 6rem",
         caretColor: "var(--color-text)",
       },
       ".cm-cursor": {
@@ -136,7 +134,7 @@ export function CodeMirrorEditor({
   textDirection,
   isDark,
   showLineNumbers = false,
-  isVisible = true,
+  scrollResetKey,
 }: CodeMirrorEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -233,13 +231,6 @@ export function CodeMirrorEditor({
     });
   }, [fontFamily, fontSize, lineHeight, codeFontFamily, isDark]);
 
-  // Re-measure layout when becoming visible (after display:none → visible)
-  useEffect(() => {
-    if (isVisible) {
-      viewRef.current?.requestMeasure();
-    }
-  }, [isVisible]);
-
   // Update line numbers when setting changes
   useEffect(() => {
     const view = viewRef.current;
@@ -251,10 +242,17 @@ export function CodeMirrorEditor({
     });
   }, [showLineNumbers]);
 
+  // Scroll to top on note switch (runs after content sync effect above)
+  useEffect(() => {
+    if (scrollResetKey !== undefined) {
+      viewRef.current?.scrollDOM.scrollTo(0, 0);
+    }
+  }, [scrollResetKey]);
+
   return (
     <div
       ref={containerRef}
-      className="cm-source-editor"
+      className="cm-source-editor h-full"
       dir={textDirection}
     />
   );
