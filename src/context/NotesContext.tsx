@@ -50,6 +50,7 @@ interface NotesActionsContextValue {
   pinNote: (id: string) => Promise<void>;
   unpinNote: (id: string) => Promise<void>;
   createNoteInFolder: (folderPath: string) => Promise<void>;
+  createNoteWithName: (name: string) => Promise<void>;
   createFolder: (parentPath: string, name: string) => Promise<void>;
   deleteFolder: (path: string) => Promise<void>;
   renameFolder: (oldPath: string, newName: string) => Promise<void>;
@@ -330,6 +331,38 @@ export function NotesProvider({ children }: { children: ReactNode }) {
         setError(
           err instanceof Error ? err.message : "Failed to create note"
         );
+      }
+    },
+    [refreshNotes]
+  );
+
+  const createNoteWithName = useCallback(
+    async (name: string) => {
+      try {
+        const parts = name.split(/[/\\]/);
+        const leafName = parts[parts.length - 1];
+        const headerText = leafName;
+        const subfolderParts = parts.slice(0, -1);
+
+        const targetFolder = subfolderParts.filter(Boolean).join("/") || undefined;
+
+        const sanitizedLeaf = leafName.replace(/[*?:"<>|]/g, "_").trim() || "Untitled";
+        const content = `# ${headerText}\n\n`;
+
+        const note = await notesService.createNoteWithName(targetFolder, sanitizedLeaf, content);
+        selectRequestIdRef.current += 1;
+        pendingNewNoteIdRef.current = note.id;
+        recentlySavedRef.current.add(note.id);
+        await refreshNotes();
+        setCurrentNote(note);
+        setSelectedNoteId(note.id);
+        setSearchQuery("");
+        setSearchResults([]);
+        setTimeout(() => {
+          recentlySavedRef.current.delete(note.id);
+        }, 1000);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to create note");
       }
     },
     [refreshNotes]
@@ -746,6 +779,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       pinNote,
       unpinNote,
       createNoteInFolder,
+      createNoteWithName,
       createFolder: createFolderAction,
       deleteFolder: deleteFolderAction,
       renameFolder: renameFolderAction,
@@ -771,6 +805,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       pinNote,
       unpinNote,
       createNoteInFolder,
+      createNoteWithName,
       createFolderAction,
       deleteFolderAction,
       renameFolderAction,

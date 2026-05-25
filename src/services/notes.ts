@@ -33,6 +33,18 @@ export async function createNote(targetFolder?: string): Promise<Note> {
   return invoke("create_note", { targetFolder: targetFolder ?? null });
 }
 
+export async function createNoteWithName(
+  targetFolder: string | undefined,
+  filename: string,
+  content: string,
+): Promise<Note> {
+  return invoke("create_note_with_name", {
+    targetFolder: targetFolder ?? null,
+    filename,
+    content,
+  });
+}
+
 export async function listFolders(): Promise<string[]> {
   return invoke("list_folders");
 }

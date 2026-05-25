@@ -425,22 +425,9 @@ export function Editor({
               What&apos;s on your mind?
             </h1>
             <p className="text-sm">
-              Pick up where you left off, or start something new
+              Pick up where you left off, or start something new<br />
+              by typing a name into the search bar and creating a file
             </p>
-            {createNote && (
-              <Button
-                onClick={createNote}
-                variant="secondary"
-                size="md"
-                className="mt-4"
-              >
-                New Note{" "}
-                <span className="text-text-muted ml-1">
-                  {mod}
-                  {isMac ? "" : "+"}N
-                </span>
-              </Button>
-            )}
           </div>
         </div>
       </div>

@@ -339,7 +339,7 @@ export function NoteList({
             key={item.id}
             id={item.id}
             isSelected={selectedNoteId === item.id}
-            isPinned={'isPinned' in item ? item.isPinned : false}
+            isPinned={'isPinned' in item ? (item.isPinned as boolean) : false}
             onSelect={selectNote}
             onPin={pinNote}
             onUnpin={unpinNote}

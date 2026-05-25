@@ -1356,6 +1356,98 @@ async fn create_note(target_folder: Option<String>, state: State<'_, AppState>) 
     })
 }
 
+#[tauri::command]
+async fn create_note_with_name(
+    target_folder: Option<String>,
+    filename: String,
+    content: String,
+    state: State<'_, AppState>,
+) -> Result<Note, String> {
+    let folder = {
+        let app_config = state.app_config.read().expect("app_config read lock");
+        app_config
+            .active_folder
+            .clone()
+            .ok_or("Notes folder not set")?
+    };
+    let folder_path = PathBuf::from(&folder);
+
+    let sanitized = sanitize_filename(&filename);
+    let sanitized = if sanitized.is_empty() {
+        "Untitled".to_string()
+    } else {
+        sanitized
+    };
+
+    let base_id = if let Some(ref folder_prefix) = target_folder {
+        if folder_prefix.is_empty() {
+            sanitized
+        } else {
+            format!("{}/{}", folder_prefix.trim_end_matches('/'), sanitized)
+        }
+    } else {
+        sanitized
+    };
+
+    let file_path = abs_path_from_id(&folder_path, &base_id)?;
+
+    // If the file already exists, open it without overwriting
+    if file_path.exists() {
+        let existing_content = fs::read_to_string(&file_path)
+            .await
+            .map_err(|e| e.to_string())?;
+        let metadata = fs::metadata(&file_path)
+            .await
+            .map_err(|e| e.to_string())?;
+        let modified = metadata
+            .modified()
+            .ok()
+            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        return Ok(Note {
+            id: base_id,
+            title: extract_title(&existing_content),
+            content: existing_content,
+            path: file_path.to_string_lossy().into_owned(),
+            modified,
+        });
+    }
+
+    // Create parent directories if needed
+    if let Some(parent) = file_path.parent() {
+        fs::create_dir_all(parent)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+
+    fs::write(&file_path, &content)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let modified = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+
+    let display_title = extract_title(&content);
+
+    {
+        let index = state.search_index.lock().expect("search index mutex");
+        if let Some(ref search_index) = *index {
+            let _ = search_index.index_note(&base_id, &folder, &display_title, &content, modified);
+        }
+    }
+
+    Ok(Note {
+        id: base_id,
+        title: display_title,
+        content,
+        path: file_path.to_string_lossy().into_owned(),
+        modified,
+    })
+}
+
 /// Validate a relative folder path against traversal attacks
 const RESERVED_FOLDER_NAMES: &[&str] = &[".git", ".scratch-nano", ".obsidian", ".trash", "assets"];
 
@@ -3112,6 +3204,7 @@ pub fn run() {
             save_note,
             delete_note,
             create_note,
+            create_note_with_name,
             list_folders,
             create_folder,
             delete_folder,

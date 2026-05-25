@@ -234,10 +234,10 @@ function AppContent() {
         return;
       }
 
-      // Cmd+N - New note
+      // Cmd+N - Focus search
       if ((e.metaKey || e.ctrlKey) && e.key === "n") {
         e.preventDefault();
-        createNote();
+        window.dispatchEvent(new Event("open-sidebar-search"));
         return;
       }
 
