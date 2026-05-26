@@ -4,11 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { showUpdateToast } from "../../App";
 import { Button } from "../ui";
-import { RefreshCwIcon, SpinnerIcon, GithubIcon, FolderIcon } from "../icons";
+import { RefreshCwIcon, SpinnerIcon, GithubIcon, FolderIcon, SearchIcon } from "../icons";
 
 export function AboutSettingsSection() {
   const [appVersion, setAppVersion] = useState<string>("");
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [rebuildingIndex, setRebuildingIndex] = useState(false);
 
   useEffect(() => {
     getVersion()
@@ -24,6 +25,18 @@ export function AboutSettingsSection() {
       toast.success("You're on the latest version!");
     } else if (result === "error") {
       toast.error("Could not check for updates. Try again later.");
+    }
+  };
+
+  const handleRebuildIndex = async () => {
+    setRebuildingIndex(true);
+    try {
+      await invoke("rebuild_search_index");
+      toast.success("Search index rebuilt successfully.");
+    } catch (err) {
+      toast.error("Failed to rebuild search index.");
+    } finally {
+      setRebuildingIndex(false);
     }
   };
 
@@ -74,22 +87,43 @@ export function AboutSettingsSection() {
         <p className="text-sm text-text-muted mb-4">
           Open the folder containing settings and data files.
         </p>
-        <Button
-          onClick={async () => {
-            try {
-              const dir = await invoke<string>("get_app_data_dir");
-              await invoke("open_in_file_manager", { path: dir });
-            } catch (err) {
-              toast.error("Failed to open data directory");
-            }
-          }}
-          variant="outline"
-          size="md"
-          className="gap-1.25"
-        >
-          <FolderIcon className="w-4.5 h-4.5 stroke-[1.5]" />
-          Open Data Directory
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            onClick={async () => {
+              try {
+                const dir = await invoke<string>("get_app_data_dir");
+                await invoke("open_in_file_manager", { path: dir });
+              } catch (err) {
+                toast.error("Failed to open data directory");
+              }
+            }}
+            variant="outline"
+            size="md"
+            className="gap-1.25"
+          >
+            <FolderIcon className="w-4.5 h-4.5 stroke-[1.5]" />
+            Open Data Directory
+          </Button>
+          <Button
+            onClick={handleRebuildIndex}
+            disabled={rebuildingIndex}
+            variant="outline"
+            size="md"
+            className="gap-1.25"
+          >
+            {rebuildingIndex ? (
+              <>
+                <SpinnerIcon className="w-4.5 h-4.5 stroke-[1.5] animate-spin" />
+                Rebuilding...
+              </>
+            ) : (
+              <>
+                <SearchIcon className="w-4.5 h-4.5 stroke-[1.5]" />
+                Rebuild Search Index
+              </>
+            )}
+          </Button>
+        </div>
       </section>
 
       {/* Divider */}

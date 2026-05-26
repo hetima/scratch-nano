@@ -2667,6 +2667,11 @@ fn rebuild_search_index(state: State<AppState>) -> Result<(), String> {
     let index = state.search_index.lock().expect("search index mutex");
     match index.as_ref() {
         Some(search_index) => {
+            {
+                let mut writer = search_index.writer.lock().expect("search writer mutex");
+                writer.delete_all_documents().map_err(|e| e.to_string())?;
+                writer.commit().map_err(|e| e.to_string())?;
+            }
             for folder in &folders {
                 search_index
                     .index_folder(&PathBuf::from(folder), &ignored_dirs)
