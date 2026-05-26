@@ -151,12 +151,13 @@ export function AppearanceSettingsSection() {
     const current = editorFontSettings.baseFontFamily;
     const isBuiltin =
       current === "system-sans" || current === "serif" || current === "monospace";
-    const system = systemFonts.map((name) => ({ value: name, label: name, group: "System Fonts" }));
+    const system = systemFonts.map((name) => ({ value: name, label: name }));
     // Ensure current custom font is in the list
     if (!isBuiltin && !systemFonts.includes(current)) {
-      system.unshift({ value: current, label: current, group: "System Fonts" });
+      system.unshift({ value: current, label: current });
     }
-    return [...builtin, ...system];
+    if (system.length === 0) return builtin;
+    return [...builtin, { separator: true as const }, ...system];
   }, [systemFonts, editorFontSettings.baseFontFamily]);
 
   // Numeric input blur handler — validates and saves only when editing is done
@@ -457,44 +458,20 @@ export function AppearanceSettingsSection() {
 
           {/* Wrap Code Blocks */}
           <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium" htmlFor="wrap-code-blocks">
-              Wrap Code Blocks
-            </label>
-            <input
-              id="wrap-code-blocks"
-              type="checkbox"
-              checked={wrapCodeBlocks}
-              onChange={(e) => setWrapCodeBlocks(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
-            />
+            <span className="text-sm text-text font-medium">Wrap Code Blocks</span>
+            <OnOffSwitch value={wrapCodeBlocks} onChange={setWrapCodeBlocks} />
           </div>
 
           {/* copy: Links */}
           <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium" htmlFor="copy-links">
-              copy: Links
-            </label>
-            <input
-              id="copy-links"
-              type="checkbox"
-              checked={copyLinks}
-              onChange={(e) => setCopyLinks(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
-            />
+            <span className="text-sm text-text font-medium">copy: Links</span>
+            <OnOffSwitch value={copyLinks} onChange={setCopyLinks} />
           </div>
 
           {/* Default Source Mode */}
           <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium" htmlFor="default-source-mode">
-              Open in Edit Mode
-            </label>
-            <input
-              id="default-source-mode"
-              type="checkbox"
-              checked={defaultSourceMode}
-              onChange={(e) => setDefaultSourceMode(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
-            />
+            <span className="text-sm text-text font-medium">Open in Edit Mode</span>
+            <OnOffSwitch value={defaultSourceMode} onChange={setDefaultSourceMode} />
           </div>
         </div>
       </section>
@@ -547,19 +524,20 @@ export function AppearanceSettingsSection() {
 
           {/* Show Line Numbers */}
           <div className="flex items-center justify-between">
-            <label className="text-sm text-text font-medium" htmlFor="show-line-numbers">
-              Show Line Numbers
-            </label>
-            <input
-              id="show-line-numbers"
-              type="checkbox"
-              checked={showLineNumbers}
-              onChange={(e) => setShowLineNumbers(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
-            />
+            <span className="text-sm text-text font-medium">Show Line Numbers</span>
+            <OnOffSwitch value={showLineNumbers} onChange={setShowLineNumbers} />
           </div>
         </div>
       </section>
+    </div>
+  );
+}
+
+function OnOffSwitch({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex gap-1 p-1 rounded-[10px] border border-border shrink-0">
+      <Button onClick={() => onChange(false)} variant={!value ? "primary" : "ghost"} size="xs">Off</Button>
+      <Button onClick={() => onChange(true)} variant={value ? "primary" : "ghost"} size="xs">On</Button>
     </div>
   );
 }

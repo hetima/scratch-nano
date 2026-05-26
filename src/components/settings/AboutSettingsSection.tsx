@@ -4,7 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { showUpdateToast } from "../../App";
 import { Button } from "../ui";
-import { RefreshCwIcon, SpinnerIcon, GithubIcon } from "../icons";
+import { RefreshCwIcon, SpinnerIcon, GithubIcon, FolderIcon } from "../icons";
 
 export function AboutSettingsSection() {
   const [appVersion, setAppVersion] = useState<string>("");
@@ -62,6 +62,33 @@ export function AboutSettingsSection() {
               Check for Updates
             </>
           )}
+        </Button>
+      </section>
+
+      {/* Divider */}
+      <div className="border-t border-border border-dashed" />
+
+      {/* Maintenance */}
+      <section className="pb-2">
+        <h2 className="text-xl font-medium mb-0.5">Maintenance</h2>
+        <p className="text-sm text-text-muted mb-4">
+          Open the folder containing settings and data files.
+        </p>
+        <Button
+          onClick={async () => {
+            try {
+              const dir = await invoke<string>("get_app_data_dir");
+              await invoke("open_in_file_manager", { path: dir });
+            } catch (err) {
+              toast.error("Failed to open data directory");
+            }
+          }}
+          variant="outline"
+          size="md"
+          className="gap-1.25"
+        >
+          <FolderIcon className="w-4.5 h-4.5 stroke-[1.5]" />
+          Open Data Directory
         </Button>
       </section>
 

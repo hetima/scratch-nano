@@ -103,10 +103,15 @@ pub enum TextDirection {
     Rtl,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NotesFolderEntry {
+    pub path: String,
+}
+
 // App config (stored in app data directory - list of notes folder paths)
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
-    pub notes_folders: Vec<String>,
+    pub notes_folders: Vec<NotesFolderEntry>,
     // Currently active folder (not persisted to disk - runtime only)
     #[serde(skip)]
     pub active_folder: Option<String>,
@@ -149,6 +154,14 @@ pub struct Settings {
     pub selected_folder: Option<String>,
     #[serde(rename = "sidebarWidth")]
     pub sidebar_width: Option<u32>,
+    #[serde(rename = "interfaceFont")]
+    pub interface_font: Option<String>,
+    #[serde(rename = "showLineNumbers")]
+    pub show_line_numbers: Option<bool>,
+    #[serde(rename = "wrapCodeBlocks")]
+    pub wrap_code_blocks: Option<bool>,
+    #[serde(rename = "copyLinks")]
+    pub copy_links: Option<bool>,
 }
 
 // Search result
@@ -660,6 +673,7 @@ const DEFAULT_IGNORED_DIRS: &[&str] = &[
     "bower_components",
     ".turbo",
     ".parcel-cache",
+    ".obsidian",
 ];
 
 /// Get the effective ignored directories from settings (or defaults if not customized).
@@ -936,8 +950,8 @@ fn initialize_notes_folder(app: &AppHandle, path_buf: &PathBuf, state: &AppState
     // Update app config (add folder if not already present)
     {
         let mut app_config = state.app_config.write().expect("app_config write lock");
-        if !app_config.notes_folders.contains(&normalized_path) {
-            app_config.notes_folders.push(normalized_path.clone());
+        if !app_config.notes_folders.iter().any(|e| e.path == normalized_path) {
+            app_config.notes_folders.push(NotesFolderEntry { path: normalized_path.clone() });
         }
     }
 
@@ -985,7 +999,9 @@ fn get_notes_folders(state: State<AppState>) -> Vec<String> {
         .read()
         .expect("app_config read lock")
         .notes_folders
-        .clone()
+        .iter()
+        .map(|e| e.path.clone())
+        .collect()
 }
 
 #[tauri::command]
@@ -999,7 +1015,7 @@ fn add_notes_folder(app: AppHandle, path: String, state: State<AppState>) -> Res
 fn remove_notes_folder(path: String, state: State<AppState>, app: AppHandle) -> Result<(), String> {
     {
         let mut app_config = state.app_config.write().expect("app_config write lock");
-        app_config.notes_folders.retain(|f| f != &path);
+        app_config.notes_folders.retain(|e| e.path != path);
     }
     // Remove this folder's documents from the shared search index
     {
@@ -2638,9 +2654,9 @@ async fn copy_image_to_assets(
 
 #[tauri::command]
 fn rebuild_search_index(state: State<AppState>) -> Result<(), String> {
-    let folders = {
+    let folders: Vec<String> = {
         let app_config = state.app_config.read().expect("app_config read lock");
-        app_config.notes_folders.clone()
+        app_config.notes_folders.iter().map(|e| e.path.clone()).collect()
     };
 
     let ignored_dirs = {
@@ -2690,6 +2706,14 @@ async fn open_folder_dialog(
     .map_err(|e| format!("Dialog task failed: {}", e))?;
 
     Ok(result.map(|p| p.to_string()))
+}
+
+#[tauri::command]
+async fn get_app_data_dir(app: AppHandle) -> Result<String, String> {
+    app.path()
+        .app_data_dir()
+        .map(|p| p.to_string_lossy().to_string())
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2900,12 +2924,14 @@ fn try_select_in_notes_folder(app: &AppHandle, path: &Path) -> bool {
         None => return false,
     };
 
-    let folders = state
+    let folders: Vec<String> = state
         .app_config
         .read()
         .expect("app_config read lock")
         .notes_folders
-        .clone();
+        .iter()
+        .map(|e| e.path.clone())
+        .collect();
 
     let canonical_file = match path.canonicalize() {
         Ok(f) => f,
@@ -3101,16 +3127,16 @@ pub fn run() {
 
             // Normalize legacy/invalid saved paths (e.g. file:// URI from older builds)
             let mut changed = false;
-            app_config.notes_folders = app_config.notes_folders.into_iter().filter_map(|saved_path| {
-                match normalize_notes_folder_path(&saved_path) {
+            app_config.notes_folders = app_config.notes_folders.into_iter().filter_map(|entry| {
+                match normalize_notes_folder_path(&entry.path) {
                     Ok(normalized) if normalized.is_dir() => {
                         let normalized_str = normalized.to_string_lossy().into_owned();
-                        if normalized_str != saved_path { changed = true; }
-                        Some(normalized_str)
+                        if normalized_str != entry.path { changed = true; }
+                        Some(NotesFolderEntry { path: normalized_str })
                     }
                     Ok(normalized) => {
                         eprintln!("Notes folder not found (may be temporarily unavailable): {:?}", normalized);
-                        Some(saved_path)
+                        Some(entry)
                     }
                     Err(_) => { changed = true; None }
                 }
@@ -3126,8 +3152,8 @@ pub fn run() {
             let ignored_dirs = get_effective_ignored_dirs(&settings);
             let search_index = if let Ok(index_path) = get_search_index_path(app.handle()) {
                 SearchIndex::new(&index_path).ok().inspect(|idx| {
-                    for folder in &app_config.notes_folders {
-                        let _ = idx.index_folder(&PathBuf::from(folder), &ignored_dirs);
+                    for entry in &app_config.notes_folders {
+                        let _ = idx.index_folder(&PathBuf::from(&entry.path), &ignored_dirs);
                     }
                 })
             } else {
@@ -3152,8 +3178,8 @@ pub fn run() {
             }
 
             // Add all notes folders to asset protocol scope so images can be served
-            for folder in app.state::<AppState>().app_config.read().expect("app_config read lock").notes_folders.clone() {
-                let _ = app.asset_protocol_scope().allow_directory(&folder, true);
+            for entry in app.state::<AppState>().app_config.read().expect("app_config read lock").notes_folders.clone() {
+                let _ = app.asset_protocol_scope().allow_directory(&entry.path, true);
             }
 
             // Handle CLI args on first launch; determine whether to show the main window.
@@ -3248,6 +3274,7 @@ pub fn run() {
             copy_image_to_assets,
             save_clipboard_image,
             open_folder_dialog,
+            get_app_data_dir,
             open_in_file_manager,
             open_url_safe,
             read_file_direct,

@@ -8,11 +8,15 @@ import {
 import { cn } from "../../lib/utils";
 import { ChevronDownIcon } from "../icons";
 
+export type ComboboxOption =
+  | { value: string; label: string; separator?: false }
+  | { separator: true };
+
 export interface ComboboxProps
   extends Omit<InputHTMLAttributes<HTMLInputElement>, "onChange" | "value"> {
   value: string;
   onChange: (value: string) => void;
-  options: { value: string; label: string; group?: string }[];
+  options: ComboboxOption[];
   placeholder?: string;
 }
 
@@ -32,44 +36,26 @@ export function Combobox({
   const listRef = useRef<HTMLDivElement>(null);
 
   const displayValue =
-    options.find((o) => o.value === value)?.label ?? value;
+    options.find((o): o is Extract<ComboboxOption, { value: string }> => !o.separator && o.value === value)?.label ?? value;
 
-  // Filter options by query
+  // Selectable items only (no separators), filtered by query
+  const selectableOptions = options.filter(
+    (o): o is Extract<ComboboxOption, { value: string }> => !o.separator,
+  );
   const filtered = query
-    ? options.filter((o) =>
+    ? selectableOptions.filter((o) =>
         o.label.toLowerCase().includes(query.toLowerCase()),
       )
-    : options;
+    : selectableOptions;
 
-  // Group structure
-  const groups = filtered.reduce<
-    { key: string; label: string; items: typeof filtered }[]
-  >((acc, opt) => {
-    const key = opt.group ?? "";
-    let g = acc.find((a) => a.key === key);
-    if (!g) {
-      g = { key, label: key, items: [] };
-      acc.push(g);
-    }
-    g.items.push(opt);
-    return acc;
-  }, []);
-
-  // Compute flat index from group + item index
-  const flatItems = filtered;
-  const flatIndex = useCallback(
-    (groupIdx: number, itemIdx: number) => {
-      let idx = 0;
-      for (let g = 0; g < groupIdx; g++) idx += groups[g].items.length;
-      return idx + itemIdx;
-    },
-    [groups],
-  );
+  // When searching, render only matching items (no separators)
+  // When not searching, render full list with separators preserved
+  const displayList: ComboboxOption[] = query ? filtered : options;
 
   // Scroll highlighted item into view
   useEffect(() => {
     if (highlightIndex >= 0 && listRef.current) {
-      const el = listRef.current.children[highlightIndex] as HTMLElement;
+      const el = listRef.current.querySelector<HTMLElement>(`[data-index="${highlightIndex}"]`);
       el?.scrollIntoView({ block: "nearest" });
     }
   }, [highlightIndex]);
@@ -118,21 +104,21 @@ export function Combobox({
         case "ArrowDown":
           e.preventDefault();
           setHighlightIndex((i) =>
-            i < flatItems.length - 1 ? i + 1 : 0,
+            i < filtered.length - 1 ? i + 1 : 0,
           );
           break;
         case "ArrowUp":
           e.preventDefault();
           setHighlightIndex((i) =>
-            i > 0 ? i - 1 : flatItems.length - 1,
+            i > 0 ? i - 1 : filtered.length - 1,
           );
           break;
         case "Enter":
           e.preventDefault();
-          if (highlightIndex >= 0 && flatItems[highlightIndex]) {
-            selectOption(flatItems[highlightIndex].value);
-          } else if (flatItems.length > 0) {
-            selectOption(flatItems[0].value);
+          if (highlightIndex >= 0 && filtered[highlightIndex]) {
+            selectOption(filtered[highlightIndex].value);
+          } else if (filtered.length > 0) {
+            selectOption(filtered[0].value);
           }
           break;
         case "Escape":
@@ -146,8 +132,11 @@ export function Combobox({
           break;
       }
     },
-    [open, flatItems, highlightIndex, selectOption],
+    [open, filtered, highlightIndex, selectOption],
   );
+
+  // Map selectable item value to its flat index in `filtered`
+  const getFilteredIndex = (val: string) => filtered.findIndex((o) => o.value === val);
 
   return (
     <div ref={containerRef} className={cn("relative", className)}>
@@ -165,6 +154,7 @@ export function Combobox({
             setOpen(true);
             setQuery("");
           }}
+          onClick={() => setOpen(true)}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           className={cn(
@@ -190,38 +180,33 @@ export function Combobox({
           role="listbox"
           className="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md border border-border bg-bg py-1 shadow-lg"
         >
-          {groups.map((group, gi) => (
-            <div key={group.key}>
-              {group.label && (
-                <div className="px-3 py-1 text-xs font-medium text-text-muted">
-                  {group.label}
-                </div>
-              )}
-              {group.items.map((opt, ii) => {
-                const fi = flatIndex(gi, ii);
-                const isSelected = opt.value === value;
-                return (
-                  <div
-                    key={opt.value}
-                    role="option"
-                    aria-selected={isSelected}
-                    className={cn(
-                      "flex items-center px-3 py-1.5 text-sm cursor-pointer",
-                      fi === highlightIndex && "bg-bg-muted",
-                      isSelected && "font-medium",
-                    )}
-                    onMouseEnter={() => setHighlightIndex(fi)}
-                    onMouseDown={(e) => {
-                      e.preventDefault();
-                      selectOption(opt.value);
-                    }}
-                  >
-                    <span className="truncate">{opt.label}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
+          {displayList.map((opt, i) => {
+            if (opt.separator) {
+              return <div key={`sep-${i}`} className="my-1 border-t border-border" />;
+            }
+            const fi = getFilteredIndex(opt.value);
+            const isSelected = opt.value === value;
+            return (
+              <div
+                key={opt.value}
+                role="option"
+                aria-selected={isSelected}
+                data-index={fi}
+                className={cn(
+                  "flex items-center px-3 py-1.5 text-sm cursor-pointer",
+                  fi === highlightIndex && "bg-bg-muted",
+                  isSelected && "font-medium",
+                )}
+                onMouseEnter={() => setHighlightIndex(fi)}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectOption(opt.value);
+                }}
+              >
+                <span className="truncate">{opt.label}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 
