@@ -5,7 +5,7 @@
 
 現状プレビューリリース版です。不測の事態に備え、使用するファイルのバックアップと取ってお使いください。
 
-[リリース](https://github.com/hetima/scratch-nano/releases)
+[ダウンロード](https://github.com/hetima/scratch-nano/releases)
 
 ## 機能
 
@@ -28,6 +28,7 @@
 
 ## スクリーンショット
 
+![screen01](https://raw.githubusercontent.com/hetima/scratch-nano/main/assets/screen01.jpg)
 
 ## インストール
 
