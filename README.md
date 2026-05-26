@@ -1,92 +1,88 @@
 # Scratch Nano
 
 
-A super minimal, offline-first markdown note-taking app for macOS, Windows, and Linux.
+超ミニマルなMarkdownノートアプリ。
+
+現状プレビューリリース版です。不測の事態に備え、使用するファイルのバックアップと取ってお使いください。
+
+[リリース](https://github.com/hetima/scratch-nano/releases)
+
+## 機能
+
+余計な機能を排除して軽快動作する Markdown アプリです。プレビューと編集は別ペインで行います。ルートフォルダを複数登録できて切り替えながら作業できます。Obsidian の保管庫を登録して検索専用として使用するなど補助的位置づけで役立つのではないかと思います。とはいえ最低限の機能は備えています。Notational Velocity にインスパイアされた検索欄から直接新規ファイルを作成する機能や、ワンクリックでフレーズをコピーできる独自機能など備えています。
+
+- 完全オフライン（ソフトウェアアップデートを除く）
+- コードブロックのシンタックスハイライト、コピーボタン
+- 複数フォルダ
+- Tantivy による全文インデックス検索
+- よく使うノートをリスト上部にピン留め
+- ノート切り替え時に自動保存
+- ライト・ダークモード対応
 
 
-[Releases](https://github.com/hetima/scratch-nano/releases)
+### copy: Link 機能
 
-## Features
-
-- **Offline-first** - No cloud, no account, no internet required
-- **Markdown-based** - Notes stored as plain `.md` files you own
-- **Preview mode** - Preview `.md` file
-- **Markdown source mode** - Toggle to view and edit raw markdown (`Cmd+U`)
-- **Syntax highlighting** - 20 languages with GitHub-inspired color scheme
-- **Mermaid diagrams** - Render flowcharts, sequence diagrams, and more in fenced code blocks
-- **Focus mode** - Distraction-free writing with animated sidebar/toolbar fade (`Cmd+Shift+Enter`)
-- **Folders** - Opt-in collapsible folder tree with drag-and-drop to organize notes
-- **Multiple folders** - Manage notes across multiple root folders with a quick-switch menu
-- **Full-text search** - Fast search powered by Tantivy; create a new note by name directly from the search field
-- **Pin notes** - Pin frequently used notes to the top of the list
-- **Code copy button** - One-click copy button on fenced code blocks
-- **Auto-save** - Notes are saved automatically when switching between them
-- **Customizable** - Theme, typography, page width, and RTL text direction
-- **Lightweight** - 5-10x smaller than Obsidian or Notion
-
-## Screenshot
+環境設定でこの機能をオンにすると `copy:xxx` という形式の文章を書くとプレビューモードでリンクになって、クリックすると内容をコピーできます。半角スペースを含めたい場合は `copy:"xxx xxx"` あるいは `copy:[zzz zzz]` で囲ってください。
 
 
-## Installation
+
+## スクリーンショット
+
+
+## インストール
 
 ### Windows
 
-Download the latest `.exe` installer from [Releases](https://github.com/hetima/scratch-nano/releases) and run it. WebView2 will be downloaded automatically if needed.
+[リリース](https://github.com/hetima/scratch-nano/releases)から最新の `.exe` インストーラーをダウンロードして実行してください。WebView2 が必要な場合は自動的にダウンロードされます。
 
-### macOS (but not tested)
+### macOS（未テスト）
 
-1. Download the latest `.dmg` from [Releases](https://github.com/hetima/scratch-nano/releases)
-2. Open the DMG and drag Scratch to Applications
-3. Open Scratch from Applications
+1. [リリース](https://github.com/hetima/scratch-nano/releases)から最新の `.dmg` をダウンロード
+2. DMG を開いて Scratch をアプリケーションフォルダにドラッグ
+3. アプリケーションフォルダから Scratch を起動
 
-### Linux (but not tested)
+### Linux（未テスト）
 
-Download the latest `.AppImage` or `.deb` from [Releases](https://github.com/hetima/scratch-nano/releases).
+[リリース](https://github.com/hetima/scratch-nano/releases)から最新の `.AppImage` または `.deb` をダウンロードしてください。
 
-### From Source
+### ソースからビルド
 
-**Prerequisites:** Node.js 18+, Rust 1.70+
+**必要条件:** Node.js 18+、Rust 1.70+
 
-**macOS:** Xcode Command Line Tools · **Windows:** WebView2 Runtime (pre-installed on Windows 11)
+**macOS:** Xcode Command Line Tools · **Windows:** WebView2 Runtime（Windows 11 にはプリインストール済み）
 
 ```bash
 git clone https://github.com/hetima/scratch-nano.git
 cd scratch
 pnpm install
-pnpm tauri dev      # Development
-pnpm tauri build    # Production build
+pnpm tauri dev      # 開発
+pnpm tauri build    # プロダクションビルド
 ```
 
-## Keyboard Shortcuts
+## キーボードショートカット
 
-Scratch is designed to be usable without a mouse. Here are the essentials to get started:
+| ショートカット      | 操作                         |
+| ----------------- | ---------------------------- |
+| `Cmd+N`           | ノート検索                    |
+| `Cmd+D`           | ノートを複製                  |
+| `Delete`          | ノートを削除                  |
+| `Cmd+Backspace`   | ノートを削除                  |
+| `Cmd+P`           | コマンドパレット               |
+| `Cmd+K`           | リンクの追加・編集             |
+| `Cmd+F`           | ノート内検索                  |
+| `Cmd+U`           | Markdownソース表示切り替え     |
+| `Cmd+Shift+F`     | ノート検索                    |
+| `Cmd+R`           | 現在のノートを再読み込み       |
+| `Cmd+,`           | 環境設定を開く                    |
+| `Cmd+\`           | サイドバー表示切り替え         |
+| `Cmd+=/-/0`       | ズームイン/アウト/リセット     |
+| `↑/↓`             | ノートの移動                  |
 
-| Shortcut          | Action                 |
-| ----------------- | ---------------------- |
-| `Cmd+N`           | New note               |
-| `Cmd+D`           | Duplicate note         |
-| `Delete`          | Delete note            |
-| `Cmd+Backspace`   | Delete note            |
-| `Cmd+P`           | Command palette        |
-| `Cmd+K`           | Add/edit link          |
-| `Cmd+F`           | Find in note           |
-| `Cmd+Shift+C`     | Copy & Export menu     |
-| `Cmd+U`           | Toggle Markdown source |
-| `Cmd+Shift+Enter` | Toggle Focus mode      |
-| `Cmd+Shift+F`     | Search notes           |
-| `Cmd+R`           | Reload current note    |
-| `Cmd+,`           | Open settings          |
-| `Cmd+\`           | Toggle sidebar         |
-| `Cmd+B/I`         | Bold/Italic            |
-| `Cmd+=/-/0`       | Zoom in/out/reset      |
-| `↑/↓`             | Navigate notes         |
+**Windows の場合:** すべてのショートカットで `Cmd` の代わりに `Ctrl` を使用してください。
 
-**Note:** On Windows, use `Ctrl` instead of `Cmd` for all shortcuts.
 
-Many more shortcuts and features are available in the app—explore via the command palette (`Cmd+P` / `Ctrl+P`) or view the full reference in Settings → Shortcuts.
+## ライセンス
 
-## License
+このソフトウェアは [erictli/scratch](https://github.com/erictli/scratch) をベースに開発されました
 
-Forked from: [erictli/scratch](https://github.com/erictli/scratch)
-
-MIT
+MIT License
