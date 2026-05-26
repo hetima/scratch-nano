@@ -28,9 +28,9 @@ Triggered manually via `workflow_dispatch`. Validates frontend build (`tsc` + Vi
 - **Services:** `src/services/` wraps all Tauri commands (`notes.ts`, `files.ts`, `cli.ts`, `pdf.ts`)
 - **Types:** `src/types/note.ts` defines `NoteMetadata`, `Note`, `Settings`, `SearchResult`, `FolderNode`, etc.
 
-### Backend (src-tauri/src/lib.rs, ~3200 lines)
+### Backend (src-tauri/src/lib.rs, ~3260 lines)
 
-39 Tauri commands grouped by domain:
+37 Tauri commands grouped by domain:
 
 | Domain | Commands |
 |--------|----------|
@@ -41,7 +41,7 @@ Triggered manually via `workflow_dispatch`. Validates frontend build (`tsc` + Vi
 | Settings | `get_settings`, `update_settings` |
 | Search | `search_notes`, `rebuild_search_index` |
 | File ops | `write_file`, `read_file_direct`, `save_file_direct`, `import_file_to_folder` |
-| System | `copy_to_clipboard`, `save_clipboard_image`, `copy_image_to_assets`, `open_folder_dialog`, `open_in_file_manager`, `open_url_safe`, `open_file_preview`, `preview_note_name`, `set_title_bar_theme` |
+| System | `copy_to_clipboard`, `open_folder_dialog`, `open_in_file_manager`, `open_url_safe`, `open_file_preview`, `preview_note_name`, `set_title_bar_theme` |
 | File watcher | `start_file_watcher` |
 | CLI | `get_cli_status`, `install_cli`, `uninstall_cli` |
 | Utility | `get_default_ignored_patterns` |

@@ -28,6 +28,7 @@
 
 ## スクリーンショット
 
+[screen01](https://raw.githubusercontent.com/hetima/scratch-nano/main/assets/screen01.jpg)
 
 ## インストール
 
