@@ -411,7 +411,7 @@ function AppContent() {
             <div className="relative shrink-0">
               <div
                 data-sidebar
-                className={`transition-all duration-500 ease-out overflow-hidden ${!sidebarVisible || focusMode ? "opacity-0 -translate-x-4 pointer-events-none" : "opacity-100 translate-x-0"}`}
+                className={`transition-all duration-500 ease-out overflow-hidden h-full ${!sidebarVisible || focusMode ? "opacity-0 -translate-x-4 pointer-events-none" : "opacity-100 translate-x-0"}`}
                 style={{ width: !sidebarVisible || focusMode ? 0 : "var(--sidebar-width, 256px)" }}
               >
                 <Sidebar onOpenSettings={toggleSettings} />
