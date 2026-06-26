@@ -1,10 +1,11 @@
-import { useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from "react";
+import { useEffect, useRef, useCallback, useState, forwardRef, useImperativeHandle } from "react";
 import { EditorView, keymap, lineNumbers, highlightActiveLine } from "@codemirror/view";
-import { EditorState, Compartment } from "@codemirror/state";
+import { EditorState, Compartment, type Text } from "@codemirror/state";
 import { markdown } from "@codemirror/lang-markdown";
 import { defaultKeymap, indentWithTab, history, historyKeymap } from "@codemirror/commands";
 import { syntaxHighlighting, HighlightStyle, LanguageDescription } from "@codemirror/language";
 import { tags } from "@lezer/highlight";
+import { CodeCopyButton } from "../ui/CodeCopyButton";
 
 interface CodeMirrorEditorProps {
   content: string;
@@ -20,6 +21,45 @@ interface CodeMirrorEditorProps {
   scrollResetKey?: string;
 }
 
+interface HoveredParagraph {
+  from: number;
+  to: number;
+  text: string;
+  left: number;
+  top: number;
+}
+
+const PARAGRAPH_COPY_GUTTER_PX = 36;
+
+function isParagraphBoundaryLine(text: string): boolean {
+  return !text.trim() || text.trim() === "---";
+}
+
+function findParagraphAt(doc: Text, pos: number): { from: number; to: number; text: string } | null {
+  const line = doc.lineAt(pos);
+  if (isParagraphBoundaryLine(line.text)) return null;
+
+  let startLine = line;
+  while (startLine.number > 1) {
+    const previousLine = doc.line(startLine.number - 1);
+    if (isParagraphBoundaryLine(previousLine.text)) break;
+    startLine = previousLine;
+  }
+
+  let endLine = line;
+  while (endLine.number < doc.lines) {
+    const nextLine = doc.line(endLine.number + 1);
+    if (isParagraphBoundaryLine(nextLine.text)) break;
+    endLine = nextLine;
+  }
+
+  return {
+    from: startLine.from,
+    to: endLine.to,
+    text: doc.sliceString(startLine.from, endLine.to),
+  };
+}
+
 function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, codeFontFamily: string, isDark: boolean) {
   return EditorView.theme(
     {
@@ -32,7 +72,7 @@ function buildTheme(fontFamily: string, fontSize: number, lineHeight: number, co
       ".cm-content": {
         fontFamily,
         lineHeight: String(lineHeight),
-        padding: "2rem max(1.5rem, calc((100% - var(--editor-max-width, 48rem)) / 2)) 6rem",
+        padding: `2rem max(1.5rem, calc((100% - var(--editor-max-width, 48rem)) / 2)) 6rem max(${1.5 + PARAGRAPH_COPY_GUTTER_PX / 16}rem, calc((100% - var(--editor-max-width, 48rem)) / 2 + ${PARAGRAPH_COPY_GUTTER_PX}px))`,
         caretColor: "var(--color-text)",
       },
       ".cm-cursor": {
@@ -141,11 +181,59 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
   showLineNumbers = false,
   scrollResetKey,
 }: CodeMirrorEditorProps, ref) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const latestHoverRef = useRef<HoveredParagraph | null>(null);
   const themeCompartment = useRef(new Compartment());
   const lineNumbersCompartment = useRef(new Compartment());
   const codeFontCompartment = useRef(new Compartment());
+  const [hoveredParagraph, setHoveredParagraph] = useState<HoveredParagraph | null>(null);
+
+  const clearHoveredParagraph = useCallback(() => {
+    latestHoverRef.current = null;
+    setHoveredParagraph(null);
+  }, []);
+
+  const setHoveredParagraphFromPos = useCallback((view: EditorView, pos: number | null) => {
+    if (pos === null) {
+      clearHoveredParagraph();
+      return;
+    }
+
+    const paragraph = findParagraphAt(view.state.doc, pos);
+    if (!paragraph) {
+      clearHoveredParagraph();
+      return;
+    }
+
+    const coords = view.coordsAtPos(paragraph.from);
+    const editorRect = wrapperRef.current?.getBoundingClientRect() ?? view.dom.getBoundingClientRect();
+    if (!coords) {
+      clearHoveredParagraph();
+      return;
+    }
+
+    const nextParagraph: HoveredParagraph = {
+      ...paragraph,
+      left: Math.max(4, coords.left - editorRect.left - PARAGRAPH_COPY_GUTTER_PX + 4),
+      top: coords.top - editorRect.top,
+    };
+
+    const previousParagraph = latestHoverRef.current;
+    if (
+      previousParagraph &&
+      previousParagraph.from === nextParagraph.from &&
+      previousParagraph.to === nextParagraph.to &&
+      previousParagraph.left === nextParagraph.left &&
+      previousParagraph.top === nextParagraph.top
+    ) {
+      return;
+    }
+
+    latestHoverRef.current = nextParagraph;
+    setHoveredParagraph(nextParagraph);
+  }, [clearHoveredParagraph]);
 
   useImperativeHandle(ref, () => ({
     focus() {
@@ -197,7 +285,20 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
         themeCompartment.current.of(buildTheme(fontFamily, fontSize, lineHeight, codeFontFamily, isDark)),
         codeFontCompartment.current.of(buildSyntaxHighlighting(codeFontFamily)),
         EditorView.lineWrapping,
+        EditorView.domEventHandlers({
+          mousemove: (event, view) => {
+            const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
+            setHoveredParagraphFromPos(view, pos);
+          },
+        }),
         EditorView.updateListener.of((update) => {
+          if (
+            latestHoverRef.current &&
+            (update.docChanged || update.viewportChanged || update.geometryChanged)
+          ) {
+            setHoveredParagraphFromPos(update.view, latestHoverRef.current.from);
+          }
+
           if (update.docChanged) {
             onChangeRef.current?.(update.state.doc.toString());
           }
@@ -264,14 +365,48 @@ export const CodeMirrorEditor = forwardRef<CodeMirrorEditorHandle, CodeMirrorEdi
   useEffect(() => {
     if (scrollResetKey !== undefined) {
       viewRef.current?.scrollDOM.scrollTo(0, 0);
+      clearHoveredParagraph();
     }
-  }, [scrollResetKey]);
+  }, [scrollResetKey, clearHoveredParagraph]);
+
+  useEffect(() => {
+    const view = viewRef.current;
+    if (!view) return;
+
+    const handleScroll = () => {
+      if (!latestHoverRef.current) return;
+      setHoveredParagraphFromPos(view, latestHoverRef.current.from);
+    };
+
+    view.scrollDOM.addEventListener("scroll", handleScroll);
+    return () => view.scrollDOM.removeEventListener("scroll", handleScroll);
+  }, [setHoveredParagraphFromPos]);
 
   return (
     <div
-      ref={containerRef}
-      className="cm-source-editor h-full"
+      ref={wrapperRef}
+      className="cm-source-editor relative h-full overflow-hidden"
       dir={textDirection}
-    />
+      onMouseLeave={clearHoveredParagraph}
+    >
+      <div
+        ref={containerRef}
+        className="h-full"
+      />
+      {hoveredParagraph && (
+        <div
+          className="absolute z-10"
+          style={{ left: hoveredParagraph.left, top: hoveredParagraph.top }}
+        >
+          <CodeCopyButton
+            text={hoveredParagraph.text}
+            copyLabel=""
+            copiedLabel=""
+            className="h-7 w-7 justify-center rounded-full border border-border bg-bg/90 backdrop-blur-sm"
+            iconClassName="w-4 h-4 stroke-[1.7]"
+          />
+        </div>
+      )}
+    </div>
   );
 });
