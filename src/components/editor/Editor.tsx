@@ -188,20 +188,21 @@ export function Editor({
     setLiveContent(null);
   }, [currentNote?.id]);
 
-  // Register a pending save function so NotesContext can auto-save on note switch
+  // NotesContext から切り替え前に呼べるよう、未保存の内容を登録する。
   useEffect(() => {
     const setPendingSave = notesActionsCtx?.setPendingSave;
     if (!setPendingSave) return;
-    if (!previewMode && isDirty && liveContent !== null && saveNote) {
+    if (!previewMode && isDirty && liveContent !== null && currentNote?.id && saveNote) {
       const content = liveContent;
+      const noteId = currentNote.id;
       setPendingSave(async () => {
-        await saveNote(content);
+        await saveNote(content, noteId);
       });
     } else {
       setPendingSave(null);
     }
     return () => setPendingSave(null);
-  }, [isDirty, liveContent, saveNote, notesActionsCtx, previewMode]);
+  }, [isDirty, liveContent, currentNote?.id, saveNote, notesActionsCtx, previewMode]);
 
   // Clear dirty state when currentNote.content updates from context (after save)
   useEffect(() => {

@@ -33,6 +33,7 @@ interface NotesDataContextValue {
 // Actions context: stable references, rarely causes re-renders
 interface NotesActionsContextValue {
   setPendingSave: (fn: (() => Promise<void>) | null) => void;
+  flushPendingSave: () => Promise<void>;
   selectNote: (id: string) => Promise<void>;
   createNote: () => Promise<void>;
   consumePendingNewNote: (id: string) => boolean;
@@ -99,6 +100,12 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     pendingSaveRef.current = fn;
   }, []);
 
+  const flushPendingSave = useCallback(async () => {
+    if (pendingSaveRef.current) {
+      await pendingSaveRef.current();
+    }
+  }, []);
+
   const refreshNotes = useCallback(async () => {
     if (!notesFolder) return;
     try {
@@ -121,9 +128,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   }, [refreshNotes]);
 
   const selectNote = useCallback(async (id: string) => {
-    if (pendingSaveRef.current) {
-      await pendingSaveRef.current();
-    }
+    await flushPendingSave();
     const requestId = ++selectRequestIdRef.current;
     try {
       if (pendingNewNoteIdRef.current !== id) {
@@ -148,7 +153,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
       if (requestId !== selectRequestIdRef.current) return;
       setError(err instanceof Error ? err.message : "Failed to load note");
     }
-  }, []);
+  }, [flushPendingSave]);
 
   const reloadCurrentNote = useCallback(async () => {
     if (!selectedNoteIdRef.current) return;
@@ -506,6 +511,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
 
   const switchNotesFolder = useCallback(async (path: string) => {
     try {
+      await flushPendingSave();
       setNotesFolderState(path);
       setSelectedNoteId(null);
       setCurrentNote(null);
@@ -524,7 +530,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
         err instanceof Error ? err.message : "Failed to switch notes folder"
       );
     }
-  }, []);
+  }, [flushPendingSave]);
 
   const addNotesFolder = useCallback(async (path: string) => {
     const normalizedPath = path.replace(/\\/g, "/");
@@ -774,6 +780,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
   const actionsValue = useMemo<NotesActionsContextValue>(
     () => ({
       setPendingSave,
+      flushPendingSave,
       selectNote,
       createNote,
       consumePendingNewNote,
@@ -800,6 +807,7 @@ export function NotesProvider({ children }: { children: ReactNode }) {
     }),
     [
       setPendingSave,
+      flushPendingSave,
       selectNote,
       createNote,
       consumePendingNewNote,

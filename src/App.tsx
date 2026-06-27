@@ -48,6 +48,7 @@ function AppContent() {
     reloadCurrentNote,
     currentNote,
     syncNotesFolder,
+    flushPendingSave,
   } = useNotes();
   const { interfaceZoom, setInterfaceZoom, reloadSettings, setSidebarWidth } = useTheme();
 
@@ -87,6 +88,7 @@ function AppContent() {
   const [sidebarVisible, setSidebarVisible] = useState(true);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
+  const isClosingRef = useRef(false);
 // Listen for set-notes-folder event from CLI (scratch .)
   // Placed here in AppContent where both NotesContext and ThemeContext are available
   useEffect(() => {
@@ -104,6 +106,32 @@ function AppContent() {
       unlisten?.();
     };
   }, [syncNotesFolder, reloadSettings]);
+
+  useEffect(() => {
+    const appWindow = getCurrentWindow();
+    let cancelled = false;
+    let unlisten: (() => void) | undefined;
+
+    appWindow.onCloseRequested(async (event) => {
+      if (isClosingRef.current) return;
+
+      event.preventDefault();
+      isClosingRef.current = true;
+      try {
+        await flushPendingSave();
+      } finally {
+        await appWindow.close();
+      }
+    }).then((fn) => {
+      if (cancelled) fn();
+      else unlisten = fn;
+    });
+
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+  }, [flushPendingSave]);
 
   const toggleSidebar = useCallback(() => {
     setSidebarVisible((prev) => !prev);
@@ -583,5 +611,4 @@ function App() {
 }
 
 export default App;
-
 
