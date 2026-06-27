@@ -1,6 +1,6 @@
 [package]
 name = "scratch-nano"
-version = "0.10.1"
+version = "0.10.3"
 description = "An offline markdown-based notes app"
 authors = ["hetima"]
 edition = "2021"
